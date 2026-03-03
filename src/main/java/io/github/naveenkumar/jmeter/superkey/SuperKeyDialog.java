@@ -1,13 +1,19 @@
 package io.github.naveenkumar.jmeter.superkey;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 import java.awt.Frame;
-import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.LinearGradientPaint;
+import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.geom.Point2D;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +32,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -119,8 +126,7 @@ public class SuperKeyDialog extends JDialog {
     }
 
     private void initUI() {
-        JPanel panel = new JPanel(new BorderLayout(0, 0));
-        panel.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        JPanel panel = new AnimatedBorderPanel();
 
         JPanel searchPanel = new JPanel(new BorderLayout());
 
@@ -277,6 +283,111 @@ public class SuperKeyDialog extends JDialog {
                 int count = (Integer) countSpinner.getValue();
                 SuperKeyInjector.injectComponent(selected.className, count);
             }
+        }
+    }
+
+    private class AnimatedBorderPanel extends JPanel {
+        private float angle = 0;
+        private Timer timer;
+        private long startTime;
+        private static final int ANIMATION_DURATION = 1500; // 1.5 seconds full spin
+        private static final int FADE_DURATION = 1000; // 1 second smooth fade out
+
+        public AnimatedBorderPanel() {
+            super(new BorderLayout());
+            // 4px empty border provides space so child components don't draw over the
+            // gradient line
+            setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+            // Re-draw animation roughly every 30ms for smooth 30+ fps
+            timer = new Timer(30, e -> {
+                long elapsed = System.currentTimeMillis() - startTime;
+                if (elapsed > ANIMATION_DURATION + FADE_DURATION) {
+                    timer.stop();
+                    repaint();
+                    return;
+                }
+
+                // Increase step from 0.05f to 0.15f for a 3x faster animation spin
+                angle += 0.15f;
+                if (angle > Math.PI * 2) {
+                    angle -= Math.PI * 2;
+                }
+                repaint();
+            });
+        }
+
+        @Override
+        public void addNotify() {
+            super.addNotify();
+            startTime = System.currentTimeMillis();
+            timer.start();
+        }
+
+        @Override
+        public void removeNotify() {
+            super.removeNotify();
+            timer.stop();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int w = getWidth();
+            int h = getHeight();
+
+            // Always draw a stable native base border underneath
+            g2d.setColor(Color.GRAY);
+            g2d.setStroke(new BasicStroke(1.0f));
+            g2d.drawRect(0, 0, w - 1, h - 1);
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            if (elapsed > ANIMATION_DURATION + FADE_DURATION) {
+                g2d.dispose();
+                return;
+            }
+
+            float alpha = 1.0f;
+            if (elapsed > ANIMATION_DURATION) {
+                alpha = 1.0f - ((float) (elapsed - ANIMATION_DURATION) / FADE_DURATION);
+                alpha = Math.max(0.0f, Math.min(1.0f, alpha));
+            }
+            g2d.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, alpha));
+
+            float cx = w / 2f;
+            float cy = h / 2f;
+            // Radius large enough to encircle the bounding box corners completely
+            float r = (float) Math.hypot(cx, cy);
+
+            float x1 = cx + (float) (Math.cos(angle) * r);
+            float y1 = cy + (float) (Math.sin(angle) * r);
+            float x2 = cx + (float) (Math.cos(angle + Math.PI) * r);
+            float y2 = cy + (float) (Math.sin(angle + Math.PI) * r);
+
+            // Google AI brand colors
+            Color[] colors = {
+                    new Color(66, 133, 244), // Blue
+                    new Color(234, 67, 53), // Red
+                    new Color(251, 188, 5), // Yellow
+                    new Color(52, 168, 83), // Green
+                    new Color(66, 133, 244) // Blue (for seamless wrap)
+            };
+            float[] fractions = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
+
+            LinearGradientPaint paint = new LinearGradientPaint(
+                    new Point2D.Float(x1, y1),
+                    new Point2D.Float(x2, y2),
+                    fractions, colors);
+
+            g2d.setPaint(paint);
+            // Thick border clipping allows 4px flush inside container rendering
+            g2d.setStroke(new BasicStroke(8.0f));
+            g2d.drawRect(0, 0, w, h);
+
+            g2d.dispose();
         }
     }
 }
