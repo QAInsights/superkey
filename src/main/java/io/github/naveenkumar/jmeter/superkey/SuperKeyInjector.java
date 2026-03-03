@@ -4,8 +4,11 @@ import org.apache.jmeter.gui.GuiPackage;
 import org.apache.jmeter.gui.tree.JMeterTreeModel;
 import org.apache.jmeter.gui.tree.JMeterTreeNode;
 import org.apache.jmeter.testelement.TestElement;
+import org.apache.jmeter.gui.util.MenuFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.swing.JOptionPane;
 
 import javax.swing.tree.TreePath;
 
@@ -34,8 +37,29 @@ public class SuperKeyInjector {
 
             JMeterTreeModel treeModel = guiPackage.getTreeModel();
 
+            // Find a valid parent for this test element
+            JMeterTreeNode validParentNode = currentNode;
+            boolean canAdd = false;
+
+            while (validParentNode != null) {
+                if (MenuFactory.canAddTo(validParentNode, testElement)) {
+                    canAdd = true;
+                    break;
+                }
+                validParentNode = (JMeterTreeNode) validParentNode.getParent();
+            }
+
+            if (!canAdd) {
+                log.warn("Cannot add component to the selected node or its parents.");
+                JOptionPane.showMessageDialog(guiPackage.getMainFrame(),
+                        "Cannot add " + testElement.getName() + " to the current location.",
+                        "Invalid Location",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
             // Add to tree
-            JMeterTreeNode newNode = treeModel.addComponent(testElement, currentNode);
+            JMeterTreeNode newNode = treeModel.addComponent(testElement, validParentNode);
 
             if (newNode == null) {
                 log.error(
