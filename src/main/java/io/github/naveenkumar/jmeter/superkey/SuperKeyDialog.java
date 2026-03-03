@@ -244,8 +244,30 @@ public class SuperKeyDialog extends JDialog {
         });
 
         searchField.addKeyListener(new KeyAdapter() {
+            // Konami code sequence: ↑↑↓↓←→←→BA
+            private static final int[] KONAMI = {
+                    KeyEvent.VK_UP, KeyEvent.VK_UP,
+                    KeyEvent.VK_DOWN, KeyEvent.VK_DOWN,
+                    KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
+                    KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
+                    KeyEvent.VK_B, KeyEvent.VK_A
+            };
+            private int konamiIdx = 0;
+
             @Override
             public void keyPressed(KeyEvent e) {
+                // Track Konami code
+                if (e.getKeyCode() == KONAMI[konamiIdx]) {
+                    konamiIdx++;
+                    if (konamiIdx == KONAMI.length) {
+                        konamiIdx = 0;
+                        EasterEggHandler.showKonamiConfetti(SuperKeyDialog.this);
+                        return;
+                    }
+                } else {
+                    konamiIdx = 0;
+                }
+
                 if (e.getKeyCode() == KeyEvent.VK_DOWN) {
                     if (listModel.getSize() > 0) {
                         resultList.setSelectedIndex(0);
@@ -300,6 +322,20 @@ public class SuperKeyDialog extends JDialog {
             setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
+            return;
+        }
+
+        // --- Easter Egg Check (exact match only, before normal search) ---
+        if (EasterEggHandler.check(originalLowerText, this)) {
+            // hide results, don't pollute search
+            scrollPane.setVisible(false);
+            setSize(600, 54);
+            setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
+            // Cannot call setText() directly from inside a DocumentListener notification
+            // — that causes "Attempt to mutate in notification". Defer it.
+            javax.swing.SwingUtilities.invokeLater(() -> searchField.setText(""));
             return;
         }
 
