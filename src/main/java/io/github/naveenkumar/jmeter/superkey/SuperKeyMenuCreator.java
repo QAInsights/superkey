@@ -13,6 +13,7 @@ import org.apache.jmeter.gui.action.AbstractAction;
 import org.apache.jmeter.gui.action.ActionRouter;
 import org.apache.jmeter.gui.action.Command;
 import org.apache.jmeter.gui.plugin.MenuCreator;
+import org.apache.jmeter.util.JMeterUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,14 +33,49 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
     @Override
     public JMenuItem[] getMenuItemsAtLocation(MENU_LOCATION location) {
         if (location == MENU_LOCATION.SEARCH) {
-            JMenuItem menuItem = new JMenuItem("Super Key", KeyEvent.VK_K);
+            JMenuItem menuItem = new JMenuItem("Super Key");
             menuItem.setName("Super Key");
 
-            int mask = java.awt.Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
-            menuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_K, mask));
+            // Look for user-defined shortcut property
+            String customShortcut = JMeterUtils.getProperty("jmeter.superkey.custom");
+            KeyStroke keyStroke = null;
+            String shortcutText = "Cmd+K / Ctrl+K"; // Default tooltip
 
+            if (customShortcut != null && !customShortcut.trim().isEmpty()) {
+                try {
+                    // Java's KeyStroke expects "control COMMA" or "ctrl K"
+                    // User might provide "ctrl+," or "cmd+shift+y"
+                    String parsedConfig = customShortcut.toLowerCase()
+                            .replace("+", " ")
+                            .replace(",", "COMMA")
+                            .replace("cmd", "meta");
+
+                    keyStroke = KeyStroke.getKeyStroke(parsedConfig);
+                    if (keyStroke != null) {
+                        shortcutText = customShortcut;
+                        log.info("Registered custom SuperKey shortcut: {}", customShortcut);
+                    } else {
+                        log.warn("Failed to parse custom SuperKey shortcut: '{}'. Falling back to default.",
+                                customShortcut);
+                    }
+                } catch (Exception ex) {
+                    log.warn("Error parsing custom SuperKey shortcut: '{}'. Falling back to default.", customShortcut,
+                            ex);
+                }
+            }
+
+            // Fallback to default (Ctrl+K / Cmd+K)
+            if (keyStroke == null) {
+                int mask = java.awt.Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+                keyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_K, mask);
+            }
+
+            menuItem.setAccelerator(keyStroke);
             menuItem.setActionCommand(ACTION_CMD);
             menuItem.addActionListener(ActionRouter.getInstance());
+
+            // Save shortcut tooltips for toolbar injection
+            menuItem.putClientProperty("shortcutText", shortcutText);
 
             return new JMenuItem[] { menuItem };
         }
@@ -103,7 +139,19 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
 
             if (imageURL != null) {
                 javax.swing.JButton superKeyButton = new javax.swing.JButton(new javax.swing.ImageIcon(imageURL));
-                superKeyButton.setToolTipText("Super Key (Cmd+K / Ctrl+K)");
+
+                // Get the mapped shortcut dynamically from the instantiated menu items to
+                // determine tooltip text
+                String tooltip = "Super Key (Cmd+K / Ctrl+K)";
+                JMenuItem[] searchMenus = getMenuItemsAtLocation(MENU_LOCATION.SEARCH);
+                if (searchMenus != null && searchMenus.length > 0) {
+                    Object parsedTooltip = searchMenus[0].getClientProperty("shortcutText");
+                    if (parsedTooltip != null) {
+                        tooltip = "Super Key (" + parsedTooltip + ")";
+                    }
+                }
+
+                superKeyButton.setToolTipText(tooltip);
                 superKeyButton.addActionListener(org.apache.jmeter.gui.action.ActionRouter.getInstance());
                 superKeyButton.setActionCommand(ACTION_CMD);
 
