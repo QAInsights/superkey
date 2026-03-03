@@ -306,13 +306,18 @@ public class SuperKeyDialog extends JDialog {
         // Check if the typed text matches any defined shortcut
         String mappedComponentName = shortcutMap.get(originalLowerText);
 
-        // The effective search text is either the mapped name (if it matches a
-        // shortcut) or the original text
-        final String searchTarget = (mappedComponentName != null) ? mappedComponentName : originalLowerText;
-
+        // Search with BOTH the original text AND the mapped shortcut name
+        // so natural matches (e.g. "HTTP Request" for "http") always appear
         List<ComponentProvider.ComponentItem> filtered = allComponents.stream()
-                .filter(c -> c.name.toLowerCase().contains(searchTarget)
-                        || c.className.toLowerCase().contains(searchTarget))
+                .filter(c -> {
+                    String nameLower = c.name.toLowerCase();
+                    String classLower = c.className.toLowerCase();
+                    boolean matchesOriginal = nameLower.contains(originalLowerText)
+                            || classLower.contains(originalLowerText);
+                    boolean matchesMapped = mappedComponentName != null
+                            && (nameLower.contains(mappedComponentName) || classLower.contains(mappedComponentName));
+                    return matchesOriginal || matchesMapped;
+                })
                 .collect(Collectors.toList());
 
         for (ComponentProvider.ComponentItem item : filtered) {
