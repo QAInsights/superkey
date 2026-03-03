@@ -6,16 +6,25 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.stream.Collectors;
+import org.apache.jmeter.util.JMeterUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SuperKeyDialog extends JDialog {
+
+    private static final Logger log = LoggerFactory.getLogger(SuperKeyDialog.class);
 
     private JTextField searchField;
     private JSpinner countSpinner;
     private JList<ComponentProvider.ComponentItem> resultList;
     private DefaultListModel<ComponentProvider.ComponentItem> listModel;
     private List<ComponentProvider.ComponentItem> allComponents;
+    private final Map<String, String> shortcutMap = new HashMap<>();
 
     public SuperKeyDialog() {
         super((Frame) null, "Super Key Search", true);
@@ -25,9 +34,69 @@ public class SuperKeyDialog extends JDialog {
 
         allComponents = ComponentProvider.getAllComponents();
 
+        loadShortcuts();
+
         initUI();
         setupListeners();
         filterList("");
+    }
+
+    private void loadShortcuts() {
+        // Properties defined by the user directly in jmeter.properties or
+        // user.properties
+        Properties jmeterProps = JMeterUtils.getJMeterProperties();
+
+        if (jmeterProps == null) {
+            return;
+        }
+
+        // We will scan ALL properties.
+        // Reason: The user might define `jmeter.superkey.shortcuts=tg, thread group`
+        // (Single line map)
+        // or they might accidentally define a multi-line value WITHOUT the `\`
+        // continuation character:
+        // jmeter.superkey.shortcuts=
+        // tg, thread group;
+        // csv, csv data set config;
+        // In this case, Java properties parser treats `tg, thread group;` as an actual
+        // KEY with an empty value.
+        // So we will look for any property KEY or VALUE that contains a valid shortcut
+        // mapping (a comma).
+
+        for (Map.Entry<Object, Object> entry : jmeterProps.entrySet()) {
+            String propKey = String.valueOf(entry.getKey()).trim();
+            String propVal = String.valueOf(entry.getValue()).trim();
+
+            if (propKey.startsWith("jmeter.superkey.shortcut")) {
+                // If it's explicitly defined as a standard property line:
+                // e.g. jmeter.superkey.shortcuts=tg, thread group; csv, csv data config
+                parseShortcutString(propVal);
+            } else if (propKey.contains(",") && propKey.length() < 50) {
+                // It's possible the user defined it without a trailing slash,
+                // causing standard keys to be parsed as "tg," and value as "thread group;"
+                // We combine the key and value with a space to reconstruct the line
+                String fullLine = propKey + (propVal.isEmpty() ? "" : " " + propVal);
+                if (fullLine.endsWith(";")) {
+                    fullLine = fullLine.substring(0, fullLine.length() - 1);
+                }
+                parseShortcutString(fullLine);
+            }
+        }
+        log.info("SuperKey loaded shortcuts mapping: {}", shortcutMap);
+    }
+
+    private void parseShortcutString(String mappedString) {
+        if (mappedString != null && !mappedString.trim().isEmpty()) {
+            String[] mappings = mappedString.split(";");
+            for (String mapping : mappings) {
+                String[] parts = mapping.split(",");
+                if (parts.length == 2) {
+                    String shortcut = parts[0].trim().toLowerCase();
+                    String componentName = parts[1].trim().toLowerCase();
+                    shortcutMap.put(shortcut, componentName);
+                }
+            }
+        }
     }
 
     private void initUI() {
@@ -147,9 +216,18 @@ public class SuperKeyDialog extends JDialog {
 
     private void filterList(String text) {
         listModel.clear();
-        String lowerText = text.toLowerCase();
+        String originalLowerText = text.toLowerCase().trim();
+
+        // Check if the typed text matches any defined shortcut
+        String mappedComponentName = shortcutMap.get(originalLowerText);
+
+        // The effective search text is either the mapped name (if it matches a
+        // shortcut) or the original text
+        final String searchTarget = (mappedComponentName != null) ? mappedComponentName : originalLowerText;
+
         List<ComponentProvider.ComponentItem> filtered = allComponents.stream()
-                .filter(c -> c.name.toLowerCase().contains(lowerText) || c.className.toLowerCase().contains(lowerText))
+                .filter(c -> c.name.toLowerCase().contains(searchTarget)
+                        || c.className.toLowerCase().contains(searchTarget))
                 .collect(Collectors.toList());
 
         for (ComponentProvider.ComponentItem item : filtered) {
