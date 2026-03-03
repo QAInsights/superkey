@@ -11,7 +11,6 @@ import javax.swing.KeyStroke;
 
 import org.apache.jmeter.gui.action.AbstractAction;
 import org.apache.jmeter.gui.action.ActionRouter;
-import org.apache.jmeter.gui.action.Command;
 import org.apache.jmeter.gui.plugin.MenuCreator;
 import org.apache.jmeter.util.JMeterUtils;
 import org.slf4j.Logger;
@@ -47,8 +46,21 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
                     // User might provide "ctrl+," or "cmd+shift+y"
                     String parsedConfig = customShortcut.toLowerCase()
                             .replace("+", " ")
-                            .replace(",", "COMMA")
-                            .replace("cmd", "meta");
+                            .replace(",", "COMMA");
+
+                    // Intelligent OS Smart-Swap
+                    // If the user configured "cmd" but is on Windows/Linux, swap to "ctrl"
+                    // If the user configured "ctrl" but is on macOS, swap to "cmd" (meta)
+                    boolean isMac = System.getProperty("os.name").toLowerCase().contains("mac");
+                    boolean isLinux = System.getProperty("os.name").toLowerCase().contains("linux");
+                    if (isMac) {
+                        parsedConfig = parsedConfig.replace("ctrl", "meta").replace("cmd", "meta").replace("control",
+                                "meta");
+                    } else if (isLinux) {
+                        parsedConfig = parsedConfig.replace("cmd", "ctrl").replace("meta", "ctrl");
+                    } else {
+                        parsedConfig = parsedConfig.replace("cmd", "ctrl").replace("meta", "ctrl");
+                    }
 
                     keyStroke = KeyStroke.getKeyStroke(parsedConfig);
                     if (keyStroke != null) {
@@ -133,9 +145,11 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
                 }
             }
 
-            // Use JMeter's core find icon natively
-            java.net.URL imageURL = org.apache.jmeter.util.JMeterUtils.class.getClassLoader()
-                    .getResource("org/apache/jmeter/images/toolbar/22x22/edit-find-7.png");
+            String iconSize = org.apache.jmeter.util.JMeterUtils.getPropDefault("jmeter.toolbar.icons.size", "22x22");
+            String sizePrefix = iconSize.split("x")[0];
+
+            java.net.URL imageURL = SuperKeyMenuCreator.class.getClassLoader()
+                    .getResource("io/github/naveenkumar/jmeter/resources/" + sizePrefix + ".png");
 
             if (imageURL != null) {
                 javax.swing.JButton superKeyButton = new javax.swing.JButton(new javax.swing.ImageIcon(imageURL));
@@ -159,11 +173,37 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
                 superKeyButton.setFocusable(false);
                 superKeyButton.setRolloverEnabled(true);
 
-                toolbar.addSeparator();
-                toolbar.add(superKeyButton);
+                // Find the index of the "start" button to insert before it
+                int insertIndex = toolbar.getComponentCount();
+                for (int i = 0; i < toolbar.getComponentCount(); i++) {
+                    java.awt.Component comp = toolbar.getComponent(i);
+                    if (comp instanceof javax.swing.JButton) {
+                        String cmd = ((javax.swing.JButton) comp).getActionCommand();
+                        // JMeter's standard start action commands
+                        if ("start".equals(cmd) || "test_start".equals(cmd) || "start_no_timers".equals(cmd)) {
+                            insertIndex = i;
+                            // Optionally, if there's a separator right before the start button,
+                            // we might want to insert before the separator.
+                            if (i > 0 && toolbar.getComponent(i - 1) instanceof javax.swing.JToolBar.Separator) {
+                                insertIndex = i - 1;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (insertIndex < toolbar.getComponentCount()) {
+                    toolbar.add(superKeyButton, insertIndex);
+                    // Optionally push a separator after it to group it nicely
+                    // toolbar.add(new javax.swing.JToolBar.Separator(), insertIndex + 1);
+                } else {
+                    toolbar.addSeparator();
+                    toolbar.add(superKeyButton);
+                }
+
                 toolbar.revalidate();
                 toolbar.repaint();
-                log.info("Super Key search button successfully injected into JMeter toolbar.");
+                log.info("Super Key search button successfully injected into JMeter toolbar before run button.");
             }
         } catch (Exception ex) {
             log.error("Failed to add SuperKey button to the JMeter toolbar", ex);
