@@ -172,7 +172,36 @@ public class SuperKeyDialog extends JDialog {
             searchPanel.add(iconLabel, BorderLayout.WEST);
         }
 
-        searchField = new JTextField();
+        searchField = new JTextField() {
+            private static final String[] PLACEHOLDERS = {
+                    "What can I help you test today?",
+                    "Find anything. Test faster. Ship sooner.",
+                    "Search components, actions… or try 'coffee' \u2615",
+                    "Your JMeter command center — type anything",
+                    "Ctrl+K → SuperKey → \u26a1 Done",
+                    "Search smarter, not harder",
+                    "Find. Insert. Dominate. \uD83C\uDFAF",
+                    "Need a sampler? An assertion? Just type.",
+                    "Type anything or try a secret command \uD83E\uDD2B",
+            };
+            private final String PLACEHOLDER = PLACEHOLDERS[new java.util.Random().nextInt(PLACEHOLDERS.length)];
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (getText().isEmpty()) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g2.setColor(new Color(160, 160, 160));
+                    g2.setFont(getFont().deriveFont(Font.ITALIC));
+                    java.awt.Insets ins = getInsets();
+                    java.awt.FontMetrics fm = g2.getFontMetrics();
+                    int y = ins.top + (getHeight() - ins.top - ins.bottom - fm.getHeight()) / 2 + fm.getAscent();
+                    g2.drawString(PLACEHOLDER, ins.left + 2, y);
+                    g2.dispose();
+                }
+            }
+        };
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 16));
         searchField.setOpaque(false);
         searchField.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
