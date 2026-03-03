@@ -2,6 +2,10 @@
 
 > A blazing-fast command palette for Apache JMeter. Search components, run actions, and discover surprises — all from your keyboard.
 
+![SuperKey](images/launch.png)
+
+![SuperKey](images/add.png)
+
 ---
 
 ## ✨ Features at a Glance

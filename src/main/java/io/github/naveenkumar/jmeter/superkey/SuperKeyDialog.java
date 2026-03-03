@@ -192,8 +192,8 @@ public class SuperKeyDialog extends JDialog {
                 if (getText().isEmpty()) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                    g2.setColor(new Color(160, 160, 160));
-                    g2.setFont(getFont().deriveFont(Font.ITALIC));
+                    g2.setColor(new Color(100, 100, 100));
+                    g2.setFont(getFont());
                     java.awt.Insets ins = getInsets();
                     java.awt.FontMetrics fm = g2.getFontMetrics();
                     int y = ins.top + (getHeight() - ins.top - ins.bottom - fm.getHeight()) / 2 + fm.getAscent();
