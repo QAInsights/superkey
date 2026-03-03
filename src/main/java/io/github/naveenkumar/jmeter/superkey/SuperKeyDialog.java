@@ -1,9 +1,11 @@
 package io.github.naveenkumar.jmeter.superkey;
 
-import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Font;
+import java.awt.Frame;
+import java.awt.Color;
+import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.HashMap;
@@ -11,6 +13,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
+
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSpinner;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+
+import org.apache.jmeter.gui.action.ActionRouter;
 import org.apache.jmeter.util.JMeterUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -212,6 +231,15 @@ public class SuperKeyDialog extends JDialog {
                 }
             }
         });
+
+        resultList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                ComponentProvider.ComponentItem selectedItem = resultList.getSelectedValue();
+                if (selectedItem != null) {
+                    countSpinner.setEnabled(!selectedItem.isAction);
+                }
+            }
+        });
     }
 
     private void filterList(String text) {
@@ -239,8 +267,16 @@ public class SuperKeyDialog extends JDialog {
         ComponentProvider.ComponentItem selected = resultList.getSelectedValue();
         if (selected != null) {
             dispose();
-            int count = (Integer) countSpinner.getValue();
-            SuperKeyInjector.injectComponent(selected.className, count);
+
+            if (selected.isAction) {
+                // Execute JMeter GUI Action
+                ActionRouter.getInstance().doActionNow(
+                        new ActionEvent(this, ActionEvent.ACTION_PERFORMED, selected.className));
+            } else {
+                // Execute standard component insertion
+                int count = (Integer) countSpinner.getValue();
+                SuperKeyInjector.injectComponent(selected.className, count);
+            }
         }
     }
 }
