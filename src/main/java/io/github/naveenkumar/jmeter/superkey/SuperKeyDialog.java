@@ -13,7 +13,11 @@ import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.awt.geom.Point2D;
+import java.awt.geom.RoundRectangle2D;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,8 +27,10 @@ import java.util.stream.Collectors;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -49,14 +55,36 @@ public class SuperKeyDialog extends JDialog {
     private JSpinner countSpinner;
     private JList<ComponentProvider.ComponentItem> resultList;
     private DefaultListModel<ComponentProvider.ComponentItem> listModel;
+    private JScrollPane scrollPane;
     private List<ComponentProvider.ComponentItem> allComponents;
     private final Map<String, String> shortcutMap = new HashMap<>();
+    private java.awt.Point dragOffset;
+    private boolean hasBeenDragged = false;
+
+    private static final int ARC = 20;
 
     public SuperKeyDialog() {
         super((Frame) null, "Super Key Search", true);
         setUndecorated(true);
-        setSize(400, 300);
+        setSize(600, 54);
         setLocationRelativeTo(null);
+        setShape(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), ARC, ARC));
+
+        // Make the dialog draggable
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                dragOffset = e.getPoint();
+            }
+        });
+        addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                hasBeenDragged = true;
+                java.awt.Point loc = getLocation();
+                setLocation(loc.x + e.getX() - dragOffset.x, loc.y + e.getY() - dragOffset.y);
+            }
+        });
 
         allComponents = ComponentProvider.getAllComponents();
 
@@ -128,13 +156,26 @@ public class SuperKeyDialog extends JDialog {
     private void initUI() {
         JPanel panel = new AnimatedBorderPanel();
 
-        JPanel searchPanel = new JPanel(new BorderLayout());
+        JPanel searchPanel = new JPanel(new BorderLayout(8, 0));
+        searchPanel.setOpaque(false);
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+
+        // Load SuperKey icon
+        java.net.URL iconURL = getClass().getClassLoader()
+                .getResource("io/github/naveenkumar/jmeter/resources/icon.png");
+        if (iconURL != null) {
+            ImageIcon rawIcon = new ImageIcon(iconURL);
+            java.awt.Image scaled = rawIcon.getImage().getScaledInstance(32, 32, java.awt.Image.SCALE_SMOOTH);
+            JLabel iconLabel = new JLabel(new ImageIcon(scaled));
+            iconLabel.setVerticalAlignment(JLabel.CENTER);
+            iconLabel.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
+            searchPanel.add(iconLabel, BorderLayout.WEST);
+        }
 
         searchField = new JTextField();
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 16));
-        searchField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY),
-                BorderFactory.createEmptyBorder(10, 10, 10, 10)));
+        searchField.setOpaque(false);
+        searchField.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
         countSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 100, 1));
         countSpinner.setFont(new Font("SansSerif", Font.PLAIN, 16));
@@ -157,13 +198,14 @@ public class SuperKeyDialog extends JDialog {
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected,
                     boolean cellHasFocus) {
                 Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+                ((javax.swing.JComponent) c).setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
                 return c;
             }
         });
 
-        JScrollPane scrollPane = new JScrollPane(resultList);
+        scrollPane = new JScrollPane(resultList);
         scrollPane.setBorder(null);
+        scrollPane.setVisible(false);
 
         panel.add(searchPanel, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
@@ -252,6 +294,15 @@ public class SuperKeyDialog extends JDialog {
         listModel.clear();
         String originalLowerText = text.toLowerCase().trim();
 
+        if (originalLowerText.isEmpty()) {
+            scrollPane.setVisible(false);
+            setSize(600, 54);
+            setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
+            return;
+        }
+
         // Check if the typed text matches any defined shortcut
         String mappedComponentName = shortcutMap.get(originalLowerText);
 
@@ -266,6 +317,20 @@ public class SuperKeyDialog extends JDialog {
 
         for (ComponentProvider.ComponentItem item : filtered) {
             listModel.addElement(item);
+        }
+
+        if (!filtered.isEmpty()) {
+            scrollPane.setVisible(true);
+            setSize(600, 300);
+            setShape(new RoundRectangle2D.Double(0, 0, 600, 300, ARC, ARC));
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
+        } else {
+            scrollPane.setVisible(false);
+            setSize(600, 54);
+            setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
         }
     }
 
@@ -339,10 +404,14 @@ public class SuperKeyDialog extends JDialog {
             int w = getWidth();
             int h = getHeight();
 
-            // Always draw a stable native base border underneath
+            // Fill background with rounded rect
+            g2d.setColor(getBackground());
+            g2d.fillRoundRect(0, 0, w, h, ARC, ARC);
+
+            // Always draw a stable base border
             g2d.setColor(Color.GRAY);
             g2d.setStroke(new BasicStroke(1.0f));
-            g2d.drawRect(0, 0, w - 1, h - 1);
+            g2d.drawRoundRect(0, 0, w - 1, h - 1, ARC, ARC);
 
             long elapsed = System.currentTimeMillis() - startTime;
             if (elapsed > ANIMATION_DURATION + FADE_DURATION) {
@@ -359,7 +428,6 @@ public class SuperKeyDialog extends JDialog {
 
             float cx = w / 2f;
             float cy = h / 2f;
-            // Radius large enough to encircle the bounding box corners completely
             float r = (float) Math.hypot(cx, cy);
 
             float x1 = cx + (float) (Math.cos(angle) * r);
@@ -367,13 +435,12 @@ public class SuperKeyDialog extends JDialog {
             float x2 = cx + (float) (Math.cos(angle + Math.PI) * r);
             float y2 = cy + (float) (Math.sin(angle + Math.PI) * r);
 
-            // Google AI brand colors
             Color[] colors = {
-                    new Color(66, 133, 244), // Blue
-                    new Color(234, 67, 53), // Red
-                    new Color(251, 188, 5), // Yellow
-                    new Color(52, 168, 83), // Green
-                    new Color(66, 133, 244) // Blue (for seamless wrap)
+                    new Color(66, 133, 244),
+                    new Color(234, 67, 53),
+                    new Color(251, 188, 5),
+                    new Color(52, 168, 83),
+                    new Color(66, 133, 244)
             };
             float[] fractions = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
 
@@ -383,9 +450,8 @@ public class SuperKeyDialog extends JDialog {
                     fractions, colors);
 
             g2d.setPaint(paint);
-            // Thick border clipping allows 4px flush inside container rendering
-            g2d.setStroke(new BasicStroke(8.0f));
-            g2d.drawRect(0, 0, w, h);
+            g2d.setStroke(new BasicStroke(6.0f));
+            g2d.drawRoundRect(2, 2, w - 4, h - 4, ARC, ARC);
 
             g2d.dispose();
         }
