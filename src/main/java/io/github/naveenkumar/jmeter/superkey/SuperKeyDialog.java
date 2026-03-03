@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 public class SuperKeyDialog extends JDialog {
 
     private JTextField searchField;
+    private JSpinner countSpinner;
     private JList<ComponentProvider.ComponentItem> resultList;
     private DefaultListModel<ComponentProvider.ComponentItem> listModel;
     private List<ComponentProvider.ComponentItem> allComponents;
@@ -33,11 +34,25 @@ public class SuperKeyDialog extends JDialog {
         JPanel panel = new JPanel(new BorderLayout(0, 0));
         panel.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
 
+        JPanel searchPanel = new JPanel(new BorderLayout());
+
         searchField = new JTextField();
         searchField.setFont(new Font("SansSerif", Font.PLAIN, 16));
         searchField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY),
                 BorderFactory.createEmptyBorder(10, 10, 10, 10)));
+
+        countSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 100, 1));
+        countSpinner.setFont(new Font("SansSerif", Font.PLAIN, 16));
+        countSpinner.setToolTipText("Number of elements to add");
+        JComponent editor = countSpinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor) {
+            ((JSpinner.DefaultEditor) editor).getTextField().setFont(new Font("SansSerif", Font.PLAIN, 16));
+            ((JSpinner.DefaultEditor) editor).getTextField().setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        }
+
+        searchPanel.add(searchField, BorderLayout.CENTER);
+        searchPanel.add(countSpinner, BorderLayout.EAST);
 
         listModel = new DefaultListModel<>();
         resultList = new JList<>(listModel);
@@ -56,7 +71,7 @@ public class SuperKeyDialog extends JDialog {
         JScrollPane scrollPane = new JScrollPane(resultList);
         scrollPane.setBorder(null);
 
-        panel.add(searchField, BorderLayout.NORTH);
+        panel.add(searchPanel, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
 
         getContentPane().add(panel);
@@ -146,7 +161,8 @@ public class SuperKeyDialog extends JDialog {
         ComponentProvider.ComponentItem selected = resultList.getSelectedValue();
         if (selected != null) {
             dispose();
-            SuperKeyInjector.injectComponent(selected.className);
+            int count = (Integer) countSpinner.getValue();
+            SuperKeyInjector.injectComponent(selected.className, count);
         }
     }
 }

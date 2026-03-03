@@ -16,6 +16,10 @@ public class SuperKeyInjector {
     private static final Logger log = LoggerFactory.getLogger(SuperKeyInjector.class);
 
     public static void injectComponent(String className) {
+        injectComponent(className, 1);
+    }
+
+    public static void injectComponent(String className, int count) {
         try {
             GuiPackage guiPackage = GuiPackage.getInstance();
             if (guiPackage == null) {
@@ -59,21 +63,35 @@ public class SuperKeyInjector {
             }
 
             // Add to tree
-            JMeterTreeNode newNode = treeModel.addComponent(testElement, validParentNode);
+            JMeterTreeNode lastNewNode = null;
+            for (int i = 0; i < count; i++) {
+                // We need to create a new instance for each addition
+                TestElement newElement = guiPackage.createTestElement(className);
+                if (newElement == null) {
+                    log.error("Failed to create TestElement for class: " + className);
+                    continue;
+                }
 
-            if (newNode == null) {
-                log.error(
-                        "Could not add component to current node. Parent node might not accept this type of component.");
-                return;
+                JMeterTreeNode newNode = treeModel.addComponent(newElement, validParentNode);
+
+                if (newNode == null) {
+                    log.error(
+                            "Could not add component to current node. Parent node might not accept this type of component.");
+                    continue;
+                }
+
+                // Apply naming policies
+                if (guiPackage.getNamingPolicy() != null) {
+                    guiPackage.getNamingPolicy().nameOnCreation(newNode);
+                }
+
+                lastNewNode = newNode;
             }
 
-            // Apply naming policies
-            if (guiPackage.getNamingPolicy() != null) {
-                guiPackage.getNamingPolicy().nameOnCreation(newNode);
+            // Select the last new node
+            if (lastNewNode != null) {
+                guiPackage.getMainFrame().getTree().setSelectionPath(new TreePath(lastNewNode.getPath()));
             }
-
-            // Select the new node
-            guiPackage.getMainFrame().getTree().setSelectionPath(new TreePath(newNode.getPath()));
 
         } catch (Exception e) {
             log.error("Error during component injection", e);
