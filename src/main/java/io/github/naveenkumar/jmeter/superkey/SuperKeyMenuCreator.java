@@ -67,8 +67,47 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
         dialog.setVisible(true);
     }
 
+    private boolean toolbarInitialized = false;
+
+    private void initToolbarButton() {
+        if (toolbarInitialized) {
+            return;
+        }
+
+        try {
+            org.apache.jmeter.gui.GuiPackage guiInstance = org.apache.jmeter.gui.GuiPackage.getInstance();
+            if (guiInstance != null && guiInstance.getMainToolbar() != null) {
+                javax.swing.JToolBar toolbar = guiInstance.getMainToolbar();
+
+                // Use JMeter's core find icon natively
+                java.net.URL imageURL = org.apache.jmeter.util.JMeterUtils.class.getClassLoader()
+                        .getResource("org/apache/jmeter/images/toolbar/22x22/edit-find-7.png");
+
+                if (imageURL != null) {
+                    javax.swing.JButton superKeyButton = new javax.swing.JButton(new javax.swing.ImageIcon(imageURL));
+                    superKeyButton.setToolTipText("Super Key (Cmd+K / Ctrl+K)");
+                    superKeyButton.addActionListener(org.apache.jmeter.gui.action.ActionRouter.getInstance());
+                    superKeyButton.setActionCommand(ACTION_CMD);
+
+                    // Style it flush like other JMeter native buttons
+                    superKeyButton.setFocusable(false);
+                    superKeyButton.setRolloverEnabled(true);
+
+                    toolbar.addSeparator();
+                    toolbar.add(superKeyButton);
+
+                    toolbarInitialized = true;
+                }
+            }
+        } catch (Exception ex) {
+            log.error("Failed to add SuperKey button to the JMeter toolbar", ex);
+        }
+    }
+
     @Override
     public Set<String> getActionNames() {
+        // Ensure toolbar button is added after the UI has been constructed
+        javax.swing.SwingUtilities.invokeLater(() -> initToolbarButton());
         return commands;
     }
 }
