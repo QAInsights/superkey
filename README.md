@@ -16,7 +16,6 @@
 | ⚡ **Action Runner** | Execute built-in JMeter actions (Start, Stop, Save, Zoom…) |
 | ⌨️ **Custom Shortcuts** | Define personal search aliases via `jmeter.properties` |
 | 🎨 **Animated Border** | Google AI-inspired spinning gradient on open |
-| 🪄 **Apple-style UI** | Rounded rectangle, draggable, auto-expanding dialog |
 | 🥚 **Easter Eggs** | Hidden surprises for secret commands |
 
 ---
@@ -80,9 +79,6 @@ SuperKey also lists native JMeter GUI actions. Search for them just like compone
 | `validate` | Validate test plan |
 | `about` | Show JMeter about dialog |
 
-> **Note:** The count spinner is automatically disabled when an action is selected (it only applies to component insertion).
-
-Actions that could cause instability (e.g. `add`, `copy`, `paste`, `change_language`) are intentionally filtered out.
 
 ---
 
@@ -99,7 +95,6 @@ jmeter.superkey.custom=http,http request;jdbc,jdbc request;tg,thread group
 - Typing `http` will show results matching both `"http"` **and** the mapped alias `"http request"` — so you never miss natural matches.
 - Aliases are **case-insensitive**.
 
-**OS Smart-Swap:** If you configure `ctrl` on macOS, it's automatically translated to `cmd` (meta), and vice versa on Windows/Linux.
 
 **Custom keyboard shortcut:**
 ```properties
@@ -108,19 +103,8 @@ jmeter.superkey.custom.shortcut=ctrl+shift+k
 
 ---
 
-## 🎨 Animated Border
-
-Every time the SuperKey dialog opens, a spinning gradient border animates in Google AI brand colors (blue, red, yellow, green):
-
-- Spins for **~1.5 seconds**
-- Fades out over **~1 second**
-- Settles to a plain static border
-
----
-
 ## 🪄 Dialog UI Behaviour
 
-- **Rounded rectangle** shape (Apple Spotlight-style)
 - **Collapses** to a slim search bar when the field is empty
 - **Expands** to show results as you type
 - **Draggable** — click and drag anywhere on the dialog to reposition it
@@ -179,18 +163,6 @@ The JAR is built to `target/superkey-jmeter-plugin-*.jar`.
 Deploy to JMeter:
 ```bash
 cp target/superkey-jmeter-plugin-*.jar $JMETER_HOME/lib/ext/
-```
-
----
-
-## 🏗️ Architecture
-
-```
-SuperKeyMenuCreator   — Registers the plugin action, menu item, and toolbar button
-SuperKeyDialog        — The main search UI (animated border, rounded rect, drag support)
-ComponentProvider     — Discovers all JMeter components and native actions via reflection
-SuperKeyInjector      — Inserts the selected component into the active JMeter tree node
-EasterEggHandler      — All easter egg logic (animations, messages, confetti)
 ```
 
 ---
