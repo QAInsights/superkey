@@ -22,6 +22,8 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 
+import io.github.naveenkumar.jmeter.superkey.LicenseBridge;
+
 public class EasterEggHandler {
 
     private static final Map<String, Consumer<JDialog>> EGGS = new HashMap<>();
@@ -81,6 +83,25 @@ public class EasterEggHandler {
                         + "</div>"
                         + "</body></html>",
                 "You found me!"));
+        // -- superkey pro --
+        if (LicenseBridge.isPro()) {
+            EGGS.put("awesome", d -> showMessage(d,
+                    "<html>"
+                            + "<body style='font-family:SansSerif; font-size:13px; padding:8px;'>"
+                            + "<div style='text-align:center; margin-bottom:10px;'>"
+                            + "  <b style='font-size:16px;'>&#128273; SuperKey Pro Plugin</b>"
+                            + "</div>"
+                            + "<table cellpadding='4' style='margin:0 auto;'>"
+                            + "  <tr><td align='right'><b>Author:</b></td><td>" + AUTHOR + "</td></tr>"
+                            + "  <tr><td align='right'><b>Version:</b></td><td>" + VERSION + "</td></tr>"
+                            + "  <tr><td align='right'><b>Built with:</b></td><td>&#10084;&#65039; for JMeter power users</td></tr>"
+                            + "</table>"
+                            + "<div style='text-align:center; margin-top:12px;'>"
+                            + "  <i>You found one. &#127881;</i>"
+                            + "</div>"
+                            + "</body></html>",
+                    "You found me!"));
+        }
 
         // --- stress ---
         EGGS.put("stress", d -> showMessage(d,
