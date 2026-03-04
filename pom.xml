@@ -30,4 +30,75 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+
+        <!-- ================================================================
+             OSS Profile (default)
+             Produces:  superkey-jmeter-plugin-<version>-oss.jar
+             Excludes:  src/main/java/**/pro/** (no pro source compiled)
+             Usage:     mvn clean package                (uses default profile)
+                        mvn clean package -P oss         (explicit)
+             ================================================================ -->
+        <profile>
+            <id>oss</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.11.0</version>
+                        <configuration>
+                            <excludes>
+                                <!-- Exclude the entire pro package from the OSS build -->
+                                <exclude>io/github/naveenkumar/jmeter/superkey/pro/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <configuration>
+                            <classifier>oss</classifier>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- ================================================================
+             Pro Profile
+             Produces:  superkey-jmeter-plugin-<version>-pro.jar
+             Includes:  All source files including src/main/java/**/pro/**
+             Usage:     mvn clean package -P pro
+             Note:      Run this ONLY from the private superkey-pro repository
+                        where the pro source code is present.
+             ================================================================ -->
+        <profile>
+            <id>pro</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.11.0</version>
+                        <!-- No exclusions — compile everything including pro/** -->
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <configuration>
+                            <classifier>pro</classifier>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+    </profiles>
+
 </project>
