@@ -5,11 +5,9 @@
 #
 # Usage:
 #   ./scripts/push-pro-feature.sh -m "feat(pro): add team sync"
-#   ./scripts/push-pro-feature.sh -m "feat(pro): license server" -b "pro-feat/license-server"
 #
 # Options:
 #   -m  Commit message (required)
-#   -b  Branch to push to on the pro remote (default: current branch)
 # =============================================================================
 set -euo pipefail
 
@@ -22,13 +20,11 @@ fail()  { echo -e "\n   ${RED}🚨 $1${NC}"; exit 1; }
 
 # ── Parse args ────────────────────────────────────────────────────────────────
 MESSAGE=""
-BRANCH=""
 
-while getopts "m:b:" opt; do
+while getopts "m:" opt; do
     case $opt in
         m) MESSAGE="$OPTARG" ;;
-        b) BRANCH="$OPTARG" ;;
-        *) echo "Usage: $0 -m <commit message> [-b <branch>]"; exit 1 ;;
+        *) echo "Usage: $0 -m <commit message>"; exit 1 ;;
     esac
 done
 
@@ -41,18 +37,8 @@ cd "$REPO_ROOT"
 
 # ── 1. Determine branch ───────────────────────────────────────────────────────
 step "Checking git state"
-CURRENT_BRANCH=$(git branch --show-current)
-[[ -z "$BRANCH" ]] && BRANCH="$CURRENT_BRANCH"
-
-ok "Repo root : $REPO_ROOT"
-ok "Branch    : $BRANCH"
-
-if [[ "$BRANCH" == "main" ]]; then
-    warn "You are pushing a Pro feature directly from 'main'."
-    warn "Consider using a 'pro-feat/*' branch for cleaner history."
-    read -rp "   Continue anyway? (y/N): " confirm
-    [[ "$confirm" != "y" ]] && exit 0
-fi
+ok "Repo root   : $REPO_ROOT"
+ok "Push target : pro/main (direct — no PR needed)"
 
 # ── 2. Check pro remote exists ────────────────────────────────────────────────
 step "Verifying 'pro' remote exists"
@@ -104,10 +90,10 @@ step "Committing: $MESSAGE"
 git commit -m "$MESSAGE"
 ok "Committed"
 
-# ── 8. Push to pro remote ONLY ────────────────────────────────────────────────
-step "Pushing to 'pro' remote — $BRANCH"
-if ! git push pro "$BRANCH"; then
-    fail "git push to 'pro' remote failed. Rolling back local commit..."
+# ── 8. Push directly to pro/main ─────────────────────────────────────────────
+step "Pushing directly to pro/main"
+if ! git push pro HEAD:main; then
+    fail "git push to 'pro/main' failed. Rolling back local commit..."
     git reset HEAD~1
     exit 1
 fi
@@ -125,9 +111,7 @@ echo -e "${GREEN}  ✅  Pro feature pushed successfully!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "  Remote : $(git remote get-url pro)"
-echo "  Branch : $BRANCH"
+echo "  Branch : pro/main (direct push)"
 echo ""
-echo "  Next steps:"
-echo "  - Open a PR on the private GitHub repo to merge into main"
-echo "  - After merging, run: git push pro main"
+echo "  Done — no PR needed!"
 echo ""
