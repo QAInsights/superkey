@@ -22,8 +22,6 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 
-import io.github.naveenkumar.jmeter.superkey.LicenseBridge;
-
 public class EasterEggHandler {
 
     private static final Map<String, Consumer<JDialog>> EGGS = new HashMap<>();
