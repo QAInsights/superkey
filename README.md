@@ -65,6 +65,24 @@ Use the **number spinner** on the right to insert multiple copies at once.
 
 ---
 
+## ⚡ Quick Selection Hotkeys (Flow Launcher Style)
+
+SuperKey assigns a numeric hotkey (1-9, 0) to the top 10 search results for lightning-fast insertion.
+
+**Default Behavior:**
+- hold `Alt` + `1` → Inserts the **1st** result
+- hold `Alt` + `2` → Inserts the **2nd** result
+- ...
+- hold `Alt` + `0` → Inserts the **10th** result
+
+**Visual Indicators:**
+Results will show `[Alt+1]`, `[Alt+2]`, etc., next to the component name.
+
+**Customization:**
+You can change the modifier key (e.g., to `Ctrl` or `Shift`) or disable the visual indicators in `jmeter.properties`.
+
+---
+
 ## ⚡ JMeter Action Runner
 
 SuperKey also lists native JMeter GUI actions. Search for them just like components:
@@ -144,6 +162,16 @@ jmeter.superkey.custom=http,http request;jdbc,jdbc request
 # Custom keyboard shortcut to open SuperKey (default: Ctrl+K / Cmd+K)
 # Supports: ctrl, shift, alt, meta/cmd and key names
 # Example: jmeter.superkey.custom.shortcut=ctrl+shift+s
+
+# ----------------------------------------------------
+# Quick Selection Hotkeys (Flow Launcher Style)
+# ----------------------------------------------------
+# Modifier key for result shortcuts (Default: Alt)
+# Options: Alt, Ctrl, Shift, Meta, Cmd
+jmeter.superkey.hotkey.modifier=Alt
+
+# Toggle visual hotkey indicators (Default: true)
+jmeter.superkey.hotkey.show=true
 ```
 
 ---

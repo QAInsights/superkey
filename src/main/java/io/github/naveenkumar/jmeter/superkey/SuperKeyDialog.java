@@ -11,6 +11,7 @@ import java.awt.Graphics2D;
 
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -62,6 +63,11 @@ public class SuperKeyDialog extends JDialog {
     private boolean hasBeenDragged = false;
     /** Non-null when a Pro dialog style is active; null in OSS mode. */
     private String activeProStyle = null;
+    
+    // Hotkey configuration
+    private int hotkeyModifierMask;
+    private String hotkeyModifierText; // For display, e.g. "Alt"
+    private boolean showHotkeys;
 
     private static final int ARC = 20;
 
@@ -92,6 +98,7 @@ public class SuperKeyDialog extends JDialog {
         allComponents = ComponentProvider.getAllComponents();
 
         loadShortcuts();
+        loadHotkeyConfig();
 
         initUI();
         applyProStyleIfEnabled();
@@ -330,6 +337,27 @@ public class SuperKeyDialog extends JDialog {
         }
     }
 
+    private void loadHotkeyConfig() {
+        String modProp = JMeterUtils.getPropDefault("jmeter.superkey.hotkey.modifier", "Alt");
+        showHotkeys = JMeterUtils.getPropDefault("jmeter.superkey.hotkey.show", true);
+
+        // Parse modifier
+        hotkeyModifierText = modProp; // Default text
+        if ("Ctrl".equalsIgnoreCase(modProp) || "Control".equalsIgnoreCase(modProp)) {
+            hotkeyModifierMask = InputEvent.CTRL_DOWN_MASK;
+            hotkeyModifierText = "Ctrl";
+        } else if ("Shift".equalsIgnoreCase(modProp)) {
+            hotkeyModifierMask = InputEvent.SHIFT_DOWN_MASK;
+            hotkeyModifierText = "Shift";
+        } else if ("Meta".equalsIgnoreCase(modProp) || "Cmd".equalsIgnoreCase(modProp)) {
+            hotkeyModifierMask = InputEvent.META_DOWN_MASK;
+            hotkeyModifierText = "Cmd";
+        } else {
+            hotkeyModifierMask = InputEvent.ALT_DOWN_MASK;
+            hotkeyModifierText = "Alt";
+        }
+    }
+
     private void initUI() {
         JPanel panel = new AnimatedBorderPanel();
 
@@ -401,6 +429,13 @@ public class SuperKeyDialog extends JDialog {
                     boolean cellHasFocus) {
                 Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 ((javax.swing.JComponent) c).setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+
+                if (showHotkeys && index < 10 && c instanceof JLabel) {
+                    int num = (index + 1) % 10; // 1..9, then 0
+                    String text = ((JLabel) c).getText();
+                    // Prepend hotkey in a subtle way (e.g. [Alt+1])
+                    ((JLabel) c).setText("<html><b style='color:gray'>[" + hotkeyModifierText + "+" + num + "]</b>&nbsp;&nbsp;" + text + "</html>");
+                }
                 return c;
             }
         });
@@ -458,6 +493,25 @@ public class SuperKeyDialog extends JDialog {
 
             @Override
             public void keyPressed(KeyEvent e) {
+                // Hotkey Logic (Modifier + 0-9)
+                if ((e.getModifiersEx() & hotkeyModifierMask) == hotkeyModifierMask) {
+                    int idx = -1;
+                    if (e.getKeyCode() >= KeyEvent.VK_1 && e.getKeyCode() <= KeyEvent.VK_9) {
+                        idx = e.getKeyCode() - KeyEvent.VK_1; // 0 to 8
+                    } else if (e.getKeyCode() == KeyEvent.VK_0) {
+                        idx = 9;
+                    }
+
+                    if (idx != -1) {
+                        if (idx < listModel.getSize()) {
+                            resultList.setSelectedIndex(idx);
+                            injectSelected();
+                        }
+                        e.consume();
+                        return;
+                    }
+                }
+
                 // Track Konami code
                 if (e.getKeyCode() == KONAMI[konamiIdx]) {
                     konamiIdx++;
@@ -487,6 +541,25 @@ public class SuperKeyDialog extends JDialog {
         resultList.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
+                // Hotkey Logic (Modifier + 0-9)
+                if ((e.getModifiersEx() & hotkeyModifierMask) == hotkeyModifierMask) {
+                    int idx = -1;
+                    if (e.getKeyCode() >= KeyEvent.VK_1 && e.getKeyCode() <= KeyEvent.VK_9) {
+                        idx = e.getKeyCode() - KeyEvent.VK_1; // 0 to 8
+                    } else if (e.getKeyCode() == KeyEvent.VK_0) {
+                        idx = 9;
+                    }
+
+                    if (idx != -1) {
+                        if (idx < listModel.getSize()) {
+                            resultList.setSelectedIndex(idx);
+                            injectSelected();
+                        }
+                        e.consume();
+                        return;
+                    }
+                }
+
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     injectSelected();
                 } else if (e.getKeyCode() == KeyEvent.VK_UP && resultList.getSelectedIndex() == 0) {
