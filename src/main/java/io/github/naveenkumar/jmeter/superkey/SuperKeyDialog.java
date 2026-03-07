@@ -11,6 +11,7 @@ import java.awt.Graphics2D;
 
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -62,6 +63,11 @@ public class SuperKeyDialog extends JDialog {
     private boolean hasBeenDragged = false;
     /** Non-null when a Pro dialog style is active; null in OSS mode. */
     private String activeProStyle = null;
+    
+    // Hotkey configuration
+    private int hotkeyModifierMask;
+    private String hotkeyModifierText; // For display, e.g. "Alt"
+    private boolean showHotkeys;
 
     private static final int ARC = 20;
 
@@ -92,10 +98,12 @@ public class SuperKeyDialog extends JDialog {
         allComponents = ComponentProvider.getAllComponents();
 
         loadShortcuts();
+        loadHotkeyConfig();
 
         initUI();
         applyProStyleIfEnabled();
         setupListeners();
+        setupHotkeys();
         filterList("");
     }
 
@@ -330,6 +338,27 @@ public class SuperKeyDialog extends JDialog {
         }
     }
 
+    private void loadHotkeyConfig() {
+        String modProp = JMeterUtils.getPropDefault("jmeter.superkey.hotkey.modifier", "Alt");
+        showHotkeys = JMeterUtils.getPropDefault("jmeter.superkey.hotkey.show", true);
+
+        // Parse modifier
+        hotkeyModifierText = modProp; // Default text
+        if ("Ctrl".equalsIgnoreCase(modProp) || "Control".equalsIgnoreCase(modProp)) {
+            hotkeyModifierMask = InputEvent.CTRL_DOWN_MASK;
+            hotkeyModifierText = "Ctrl";
+        } else if ("Shift".equalsIgnoreCase(modProp)) {
+            hotkeyModifierMask = InputEvent.SHIFT_DOWN_MASK;
+            hotkeyModifierText = "Shift";
+        } else if ("Meta".equalsIgnoreCase(modProp) || "Cmd".equalsIgnoreCase(modProp)) {
+            hotkeyModifierMask = InputEvent.META_DOWN_MASK;
+            hotkeyModifierText = "Cmd";
+        } else {
+            hotkeyModifierMask = InputEvent.ALT_DOWN_MASK;
+            hotkeyModifierText = "Alt";
+        }
+    }
+
     private void initUI() {
         JPanel panel = new AnimatedBorderPanel();
 
@@ -395,14 +424,37 @@ public class SuperKeyDialog extends JDialog {
         resultList = new JList<>(listModel);
         resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultList.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        resultList.setCellRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected,
-                    boolean cellHasFocus) {
-                Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                ((javax.swing.JComponent) c).setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-                return c;
+        resultList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> {
+            JPanel renderer = new JPanel(new BorderLayout(15, 0));
+            renderer.setOpaque(true);
+            renderer.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+
+            JLabel nameLabel = new JLabel(value.toString());
+            nameLabel.setFont(list.getFont());
+
+            if (isSelected) {
+                renderer.setBackground(list.getSelectionBackground());
+                nameLabel.setForeground(list.getSelectionForeground());
+            } else {
+                renderer.setBackground(list.getBackground());
+                nameLabel.setForeground(list.getForeground());
             }
+
+            renderer.add(nameLabel, BorderLayout.CENTER);
+
+            if (showHotkeys && index < 10) {
+                int num = (index + 1) % 10;
+                JLabel hotkeyLabel = new JLabel("[" + hotkeyModifierText + "+" + num + "]");
+                hotkeyLabel.setFont(list.getFont().deriveFont(12f));
+                if (isSelected) {
+                    hotkeyLabel.setForeground(list.getSelectionForeground());
+                } else {
+                    hotkeyLabel.setForeground(Color.GRAY);
+                }
+                renderer.add(hotkeyLabel, BorderLayout.EAST);
+            }
+
+            return renderer;
         });
 
         scrollPane = new JScrollPane(resultList);
@@ -614,9 +666,39 @@ public class SuperKeyDialog extends JDialog {
         }
     }
 
+    private void setupHotkeys() {
+        javax.swing.JRootPane rootPane = getRootPane();
+        javax.swing.InputMap inputMap = rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        javax.swing.ActionMap actionMap = rootPane.getActionMap();
+
+        // Register hotkeys 1-9 and 0
+        for (int i = 0; i <= 9; i++) {
+            final int index = (i == 0) ? 9 : i - 1;
+            int keyCode = KeyEvent.VK_0 + i;
+            String actionKey = "hotkey_" + i;
+
+            inputMap.put(javax.swing.KeyStroke.getKeyStroke(keyCode, hotkeyModifierMask), actionKey);
+            actionMap.put(actionKey, new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if (index < listModel.getSize()) {
+                        resultList.setSelectedIndex(index);
+                        injectSelected();
+                    }
+                }
+            });
+        }
+    }
+
     private void injectSelected() {
         ComponentProvider.ComponentItem selected = resultList.getSelectedValue();
         if (selected != null) {
+            // Ensure manual spinner edits are committed
+            try {
+                countSpinner.commitEdit();
+            } catch (java.text.ParseException e) {
+                // ignore, use last valid value
+            }
             dispose();
 
             if (selected.isAction) {
