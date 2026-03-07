@@ -43,10 +43,15 @@ public final class LicenseBridge {
             return cachedResult;
         }
         try {
+            // Check if LicenseManager is on the classpath (Pro JAR)
             Class<?> cls = Class.forName(LICENSE_MANAGER_CLASS);
+            // In some build environments, we might want to return false if JMeter isn't
+            // initialized
+            // or if we specifically want to skip Pro logic during certain tests.
             cachedResult = (Boolean) cls.getMethod("isPro").invoke(null);
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException | NoClassDefFoundError e) {
             // Pro package not present — this is the OSS JAR, expected behaviour
+            // OSS mode
             cachedResult = false;
         } catch (Exception e) {
             log.warn("SuperKey: unexpected error checking Pro license via bridge", e);
@@ -68,6 +73,9 @@ public final class LicenseBridge {
      * Safe to call from any OSS class — will never throw.
      */
     public static String getDialogStyle() {
+        if (!isPro()) {
+            return null;
+        }
         try {
             Class<?> cls = Class.forName(STYLE_MANAGER_CLASS);
             return (String) cls.getMethod("getActiveStyleName").invoke(null);
