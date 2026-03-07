@@ -8,7 +8,7 @@ import java.awt.Font;
 import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.LinearGradientPaint;
+
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
@@ -16,7 +16,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
-import java.awt.geom.Point2D;
+
 import java.awt.geom.RoundRectangle2D;
 import java.util.HashMap;
 import java.util.List;
@@ -60,6 +60,8 @@ public class SuperKeyDialog extends JDialog {
     private final Map<String, String> shortcutMap = new HashMap<>();
     private java.awt.Point dragOffset;
     private boolean hasBeenDragged = false;
+    /** Non-null when a Pro dialog style is active; null in OSS mode. */
+    private String activeProStyle = null;
 
     private static final int ARC = 20;
 
@@ -68,7 +70,8 @@ public class SuperKeyDialog extends JDialog {
         setUndecorated(true);
         setSize(600, 54);
         setLocationRelativeTo(null);
-        setShape(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), ARC, ARC));
+        // Shape is applied by filterList("") → applyProShape() at end of constructor,
+        // which respects the active Pro style. Do NOT set it here.
 
         // Make the dialog draggable
         addMouseListener(new MouseAdapter() {
@@ -91,8 +94,182 @@ public class SuperKeyDialog extends JDialog {
         loadShortcuts();
 
         initUI();
+        applyProStyleIfEnabled();
         setupListeners();
         filterList("");
+    }
+
+    /**
+     * If a Pro dialog style is configured (via {@code superkey.dialog.style} in
+     * user.properties)
+     * and the Pro JAR is present, this method replaces the OSS
+     * {@link AnimatedBorderPanel}
+     * with a {@code StyledDialogPanel} loaded via reflection.
+     *
+     * <p>
+     * When running in OSS mode (no Pro JAR), or when no style property is
+     * configured,
+     * this method is a no-op — the dialog is left exactly as initialised by
+     * {@link #initUI()}.
+     *
+     * <p>
+     * <b>Important:</b> This method must NEVER import any class from the
+     * {@code pro} package.
+     * All Pro classes are accessed exclusively via {@link LicenseBridge} and
+     * reflection.
+     */
+    private void applyProStyleIfEnabled() {
+        String styleName = LicenseBridge.getDialogStyle();
+        if (styleName == null) {
+            return; // OSS path — nothing to do
+        }
+
+        try {
+            // Load DialogStyle enum and resolve the constant
+            Class<?> styleEnumClass = Class.forName(
+                    "io.github.naveenkumar.jmeter.superkey.pro.DialogStyle");
+            Object styleConstant = java.util.Arrays.stream(styleEnumClass.getEnumConstants())
+                    .filter(e -> ((Enum<?>) e).name().equals(styleName))
+                    .findFirst()
+                    .orElse(null);
+            if (styleConstant == null) {
+                log.warn("SuperKey Pro: unknown dialog style '{}', falling back to OSS style", styleName);
+                return;
+            }
+
+            // Construct a StyledDialogPanel for the chosen style
+            Class<?> panelClass = Class.forName(
+                    "io.github.naveenkumar.jmeter.superkey.pro.StyledDialogPanel");
+            java.awt.Container styledPanel = (java.awt.Container) panelClass.getConstructor(styleEnumClass)
+                    .newInstance(styleConstant);
+
+            // Migrate existing children from the OSS panel into the Pro panel.
+            // IMPORTANT: snapshot both the component references AND their BorderLayout
+            // constraints BEFORE removing anything — once a component is removed from
+            // the layout its constraint can no longer be looked up.
+            java.awt.Container ossPanel = (java.awt.Container) getContentPane().getComponent(0);
+            java.awt.Component[] children = ossPanel.getComponents();
+            String[] constraints = new String[children.length];
+            for (int i = 0; i < children.length; i++) {
+                constraints[i] = guessConstraint(children[i], ossPanel);
+            }
+            for (int i = 0; i < children.length; i++) {
+                ossPanel.remove(children[i]);
+                styledPanel.add(children[i], constraints[i]);
+            }
+
+            // Swap the root panel
+            getContentPane().remove(ossPanel);
+            getContentPane().add(styledPanel);
+
+            // Apply LaF-aware colours so components match the active JMeter theme.
+            // We read from UIManager rather than hardcoding so dark themes (Darcula)
+            // and light themes (Nimbus, Metal) both look correct.
+            Color panelBg = javax.swing.UIManager.getColor("Panel.background");
+            Color textFg = javax.swing.UIManager.getColor("TextField.foreground");
+            Color textBg = javax.swing.UIManager.getColor("TextField.background");
+            Color listBg = javax.swing.UIManager.getColor("List.background");
+            Color listFg = javax.swing.UIManager.getColor("List.foreground");
+            Color listSelBg = javax.swing.UIManager.getColor("List.selectionBackground");
+            Color listSelFg = javax.swing.UIManager.getColor("List.selectionForeground");
+            Color caretColor = javax.swing.UIManager.getColor("TextField.caretForeground");
+            if (panelBg == null)
+                panelBg = getBackground();
+            if (textFg == null)
+                textFg = Color.BLACK;
+            if (textBg == null)
+                textBg = Color.WHITE;
+            if (listBg == null)
+                listBg = panelBg;
+            if (listFg == null)
+                listFg = textFg;
+            if (listSelBg == null)
+                listSelBg = new Color(70, 80, 140);
+            if (listSelFg == null)
+                listSelFg = Color.WHITE;
+            if (caretColor == null)
+                caretColor = textFg;
+
+            searchField.setForeground(textFg);
+            searchField.setCaretColor(caretColor);
+            searchField.setSelectionColor(listSelBg);
+            searchField.setSelectedTextColor(listSelFg);
+
+            resultList.setBackground(listBg);
+            resultList.setForeground(listFg);
+            resultList.setSelectionBackground(listSelBg);
+            resultList.setSelectionForeground(listSelFg);
+
+            scrollPane.setBackground(listBg);
+            scrollPane.getViewport().setBackground(listBg);
+
+            // Spinner: match the panel theme colours
+            countSpinner.setBackground(panelBg);
+            countSpinner.setForeground(textFg);
+            Color sepColor = javax.swing.UIManager.getColor("Separator.foreground");
+            countSpinner.setBorder(BorderFactory.createLineBorder(
+                    sepColor != null ? sepColor : Color.GRAY));
+            JComponent spinEditor = countSpinner.getEditor();
+            if (spinEditor instanceof JSpinner.DefaultEditor de) {
+                de.getTextField().setBackground(panelBg);
+                de.getTextField().setForeground(textFg);
+                de.getTextField().setCaretColor(caretColor);
+                de.getTextField().setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            }
+
+            // Record which Pro style is active so filterList() uses the right shapes
+            activeProStyle = styleName;
+
+            // Adjust window shape for the chosen style
+            try {
+                java.lang.reflect.Method clipMethod = panelClass.getMethod(
+                        "getDialogClipShape", int.class, int.class);
+                java.awt.Shape clip = (java.awt.Shape) clipMethod.invoke(
+                        styledPanel, getWidth(), getHeight());
+                setShape(clip); // null = no clip (SHARP rectangular)
+            } catch (Exception ex) {
+                log.debug("SuperKey Pro: could not set dialog clip shape", ex);
+            }
+
+            // Make the dialog and content pane fully transparent so nothing
+            // bleeds through outside the StyledDialogPanel's painted region.
+            // Without this, the content pane's default background shows as
+            // a visible rectangle around the styled shape.
+            setBackground(new java.awt.Color(0, 0, 0, 0));
+            getContentPane().setBackground(new java.awt.Color(0, 0, 0, 0));
+            if (getContentPane() instanceof JComponent jc) {
+                jc.setOpaque(false);
+            }
+
+            log.info("SuperKey Pro: applied '{}' dialog style", styleName);
+        } catch (ClassNotFoundException e) {
+            // Pro JAR not on classpath — expected in OSS mode, do nothing
+        } catch (Exception e) {
+            log.warn("SuperKey Pro: could not apply dialog style '{}', using OSS fallback", styleName, e);
+        }
+    }
+
+    /**
+     * Attempts to determine the {@link java.awt.BorderLayout} constraint string
+     * for an existing child component by inspecting its current position in the
+     * parent container's layout.
+     */
+    private String guessConstraint(java.awt.Component child, java.awt.Container parent) {
+        if (parent.getLayout() instanceof java.awt.BorderLayout bl) {
+            // BorderLayout.getConstraints(Component) is package-private; map via known
+            // positions
+            if (child == bl.getLayoutComponent(java.awt.BorderLayout.NORTH))
+                return java.awt.BorderLayout.NORTH;
+            if (child == bl.getLayoutComponent(java.awt.BorderLayout.SOUTH))
+                return java.awt.BorderLayout.SOUTH;
+            if (child == bl.getLayoutComponent(java.awt.BorderLayout.EAST))
+                return java.awt.BorderLayout.EAST;
+            if (child == bl.getLayoutComponent(java.awt.BorderLayout.WEST))
+                return java.awt.BorderLayout.WEST;
+            if (child == bl.getLayoutComponent(java.awt.BorderLayout.CENTER))
+                return java.awt.BorderLayout.CENTER;
+        }
+        return null;
     }
 
     private void loadShortcuts() {
@@ -175,14 +352,10 @@ public class SuperKeyDialog extends JDialog {
         searchField = new JTextField() {
             private static final String[] PLACEHOLDERS = {
                     "What can I help you test today?",
-                    "Find anything. Test faster. Ship sooner.",
-                    "Search components, actions… or try 'coffee' \u2615",
                     "Your JMeter command center — type anything",
-                    "Ctrl+K → SuperKey → \u26a1 Done",
                     "Search smarter, not harder",
-                    "Find. Insert. Dominate. \uD83C\uDFAF",
+                    "Find. Insert. Dominate.",
                     "Need a sampler? An assertion? Just type.",
-                    "Type anything or try a secret command \uD83E\uDD2B",
             };
             private final String PLACEHOLDER = PLACEHOLDERS[new java.util.Random().nextInt(PLACEHOLDERS.length)];
 
@@ -345,10 +518,18 @@ public class SuperKeyDialog extends JDialog {
         listModel.clear();
         String originalLowerText = text.toLowerCase().trim();
 
+        // FLOATING_SHADOW needs extra pixels for the shadow to render outside
+        // the content area. For other styles the padding is zero.
+        int shadowPad = "FLOATING_SHADOW".equals(activeProStyle) ? 24 : 0; // 2 × SHADOW_PAD(12)
+        int collapsedW = 600 + shadowPad;
+        int collapsedH = 54 + shadowPad;
+        int expandedW = 600 + shadowPad;
+        int expandedH = 300 + shadowPad;
+
         if (originalLowerText.isEmpty()) {
             scrollPane.setVisible(false);
-            setSize(600, 54);
-            setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
+            setSize(collapsedW, collapsedH);
+            applyProShape(collapsedW, collapsedH);
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
             return;
@@ -358,8 +539,8 @@ public class SuperKeyDialog extends JDialog {
         if (EasterEggHandler.check(originalLowerText, this)) {
             // hide results, don't pollute search
             scrollPane.setVisible(false);
-            setSize(600, 54);
-            setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
+            setSize(collapsedW, collapsedH);
+            applyProShape(collapsedW, collapsedH);
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
             // Cannot call setText() directly from inside a DocumentListener notification
@@ -391,16 +572,45 @@ public class SuperKeyDialog extends JDialog {
 
         if (!filtered.isEmpty()) {
             scrollPane.setVisible(true);
-            setSize(600, 300);
-            setShape(new RoundRectangle2D.Double(0, 0, 600, 300, ARC, ARC));
+            setSize(expandedW, expandedH);
+            applyProShape(expandedW, expandedH);
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
         } else {
             scrollPane.setVisible(false);
-            setSize(600, 54);
-            setShape(new RoundRectangle2D.Double(0, 0, 600, 54, ARC, ARC));
+            setSize(collapsedW, collapsedH);
+            applyProShape(collapsedW, collapsedH);
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
+        }
+    }
+
+    /**
+     * Applies the correct window shape / clip for the current state.
+     * In OSS mode (activeProStyle == null) uses the standard ARC=20 rounded rect.
+     * In Pro mode uses the style-appropriate shape so setShape() is never
+     * overwritten with incompatible values during filterList() resize calls.
+     */
+    private void applyProShape(int w, int h) {
+        if (activeProStyle == null) {
+            // OSS default
+            setShape(new RoundRectangle2D.Double(0, 0, w, h, ARC, ARC));
+            return;
+        }
+        switch (activeProStyle) {
+            case "SHARP" ->
+                setShape(null); // rectangular — no clip needed
+            case "PILL" -> {
+                // Collapsed: true pill (arc = height). Expanded: softly rounded rect
+                // so the results list doesn't become a 300-px-tall oval.
+                int arc = (h <= 60) ? h : 24;
+                setShape(new RoundRectangle2D.Double(0, 0, w, h, arc, arc));
+            }
+            case "FLOATING_SHADOW" ->
+                // Larger than bounds so shadow padding shows through
+                setShape(null);
+            default ->
+                setShape(new RoundRectangle2D.Double(0, 0, w, h, ARC, ARC));
         }
     }
 
@@ -425,8 +635,6 @@ public class SuperKeyDialog extends JDialog {
         private float angle = 0;
         private Timer timer;
         private long startTime;
-        private static final int ANIMATION_DURATION = 1500; // 1.5 seconds full spin
-        private static final int FADE_DURATION = 1000; // 1 second smooth fade out
 
         public AnimatedBorderPanel() {
             super(new BorderLayout());
@@ -437,14 +645,13 @@ public class SuperKeyDialog extends JDialog {
             // Re-draw animation roughly every 30ms for smooth 30+ fps
             timer = new Timer(30, e -> {
                 long elapsed = System.currentTimeMillis() - startTime;
-                if (elapsed > ANIMATION_DURATION + FADE_DURATION) {
+                if (elapsed > GradientBorderPainter.ANIM_DURATION + GradientBorderPainter.ANIM_FADE) {
                     timer.stop();
                     repaint();
                     return;
                 }
 
-                // Increase step from 0.05f to 0.15f for a 3x faster animation spin
-                angle += 0.15f;
+                angle += GradientBorderPainter.ANGLE_STEP;
                 if (angle > Math.PI * 2) {
                     angle -= Math.PI * 2;
                 }
@@ -483,45 +690,13 @@ public class SuperKeyDialog extends JDialog {
             g2d.setStroke(new BasicStroke(1.0f));
             g2d.drawRoundRect(0, 0, w - 1, h - 1, ARC, ARC);
 
+            // Animated gradient overlay — delegated to shared utility
             long elapsed = System.currentTimeMillis() - startTime;
-            if (elapsed > ANIMATION_DURATION + FADE_DURATION) {
-                g2d.dispose();
-                return;
+            float alpha = GradientBorderPainter.computeAlpha(elapsed);
+            if (alpha > 0f) {
+                GradientBorderPainter.paint(g2d, angle, alpha,
+                        2, 2, w - 4, h - 4, ARC);
             }
-
-            float alpha = 1.0f;
-            if (elapsed > ANIMATION_DURATION) {
-                alpha = 1.0f - ((float) (elapsed - ANIMATION_DURATION) / FADE_DURATION);
-                alpha = Math.max(0.0f, Math.min(1.0f, alpha));
-            }
-            g2d.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, alpha));
-
-            float cx = w / 2f;
-            float cy = h / 2f;
-            float r = (float) Math.hypot(cx, cy);
-
-            float x1 = cx + (float) (Math.cos(angle) * r);
-            float y1 = cy + (float) (Math.sin(angle) * r);
-            float x2 = cx + (float) (Math.cos(angle + Math.PI) * r);
-            float y2 = cy + (float) (Math.sin(angle + Math.PI) * r);
-
-            Color[] colors = {
-                    new Color(66, 133, 244),
-                    new Color(234, 67, 53),
-                    new Color(251, 188, 5),
-                    new Color(52, 168, 83),
-                    new Color(66, 133, 244)
-            };
-            float[] fractions = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
-
-            LinearGradientPaint paint = new LinearGradientPaint(
-                    new Point2D.Float(x1, y1),
-                    new Point2D.Float(x2, y2),
-                    fractions, colors);
-
-            g2d.setPaint(paint);
-            g2d.setStroke(new BasicStroke(6.0f));
-            g2d.drawRoundRect(2, 2, w - 4, h - 4, ARC, ARC);
 
             g2d.dispose();
         }

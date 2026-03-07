@@ -94,6 +94,10 @@
                                 <!-- Exclude the entire pro package from the OSS build -->
                                 <exclude>io/github/naveenkumar/jmeter/superkey/pro/**</exclude>
                             </excludes>
+                            <testExcludes>
+                                <!-- Exclude pro test classes from the OSS build (they depend on pro sources) -->
+                                <testExclude>io/github/naveenkumar/jmeter/superkey/pro/**</testExclude>
+                            </testExcludes>
                         </configuration>
                     </plugin>
                     <plugin>
@@ -102,6 +106,19 @@
                         <version>3.3.0</version>
                         <configuration>
                             <classifier>oss</classifier>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>3.2.5</version>
+                        <configuration>
+                            <excludes>
+                                <!-- Exclude *IT integration test classes -->
+                                <exclude>**/*IT.java</exclude>
+                                <!-- Exclude Pro-only test classes from the OSS build -->
+                                <exclude>**/pro/**</exclude>
+                            </excludes>
                         </configuration>
                     </plugin>
                 </plugins>
