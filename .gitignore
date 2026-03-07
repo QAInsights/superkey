@@ -2,6 +2,7 @@
 # SuperKey Pro — exclude pro source from the public OSS repo.
 # The pro/ package lives ONLY in the private superkey-pro repo.
 # ============================================================
+.agent/
 src/**/pro/
 
 # Compiled class file

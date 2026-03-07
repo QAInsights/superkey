@@ -26,6 +26,8 @@ public final class LicenseBridge {
     private static final Logger log = LoggerFactory.getLogger(LicenseBridge.class);
     private static final String LICENSE_MANAGER_CLASS = "io.github.naveenkumar.jmeter.superkey.pro.LicenseManager";
 
+    private static final String STYLE_MANAGER_CLASS = "io.github.naveenkumar.jmeter.superkey.pro.StyleManager";
+
     /** Cached result — license status doesn't change during a JMeter session. */
     private static Boolean cachedResult = null;
 
@@ -51,5 +53,30 @@ public final class LicenseBridge {
             cachedResult = false;
         }
         return cachedResult;
+    }
+
+    /**
+     * Returns the active Pro dialog style name (e.g. {@code "SHARP"},
+     * {@code "PILL"},
+     * {@code "FLOATING_SHADOW"}), or {@code null} when:
+     * <ul>
+     * <li>the Pro JAR is not loaded (OSS mode), or</li>
+     * <li>no {@code superkey.dialog.style} property is configured.</li>
+     * </ul>
+     *
+     * <p>
+     * Safe to call from any OSS class — will never throw.
+     */
+    public static String getDialogStyle() {
+        try {
+            Class<?> cls = Class.forName(STYLE_MANAGER_CLASS);
+            return (String) cls.getMethod("getActiveStyleName").invoke(null);
+        } catch (ClassNotFoundException e) {
+            // Pro package not present — OSS JAR, expected behaviour
+            return null;
+        } catch (Exception e) {
+            log.warn("SuperKey: unexpected error reading dialog style via bridge", e);
+            return null;
+        }
     }
 }
