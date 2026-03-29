@@ -96,7 +96,7 @@
                             </excludes>
                             <testExcludes>
                                 <!-- Exclude pro test classes from the OSS build (they depend on pro sources) -->
-                                <testExclude>io/github/naveenkumar/jmeter/superkey/pro/**</testExclude>
+                                <exclude>io/github/naveenkumar/jmeter/superkey/pro/**</exclude>
                             </testExcludes>
                         </configuration>
                     </plugin>
