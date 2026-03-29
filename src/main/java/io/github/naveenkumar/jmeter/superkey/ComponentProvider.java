@@ -48,6 +48,19 @@ public class ComponentProvider {
         public String toString() {
             return name;
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ComponentItem that = (ComponentItem) o;
+            return java.util.Objects.equals(className, that.className);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(className);
+        }
     }
 
     public static synchronized List<ComponentItem> getAllComponents() {

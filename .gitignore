@@ -4,6 +4,7 @@
 # ============================================================
 .agent/
 src/**/pro/
+scripts/
 
 # Compiled class file
 *.class
@@ -59,3 +60,5 @@ Thumbs.db
 DEVELOPMENT.md
 PRO*.md
 GIT*.md
+private.key
+superkey.lic

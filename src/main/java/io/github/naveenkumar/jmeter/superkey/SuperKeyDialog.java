@@ -60,6 +60,12 @@ public class SuperKeyDialog extends JDialog {
     private final Map<String, String> shortcutMap = new HashMap<>();
     private java.awt.Point dragOffset;
     private boolean hasBeenDragged = false;
+
+    // Pro Basket Feature UI
+    private JLabel badgeLabel;
+    private JPanel bannerContainer;
+    private final java.util.Set<ComponentProvider.ComponentItem> globalBasket = new java.util.LinkedHashSet<>();
+    private boolean isFiltering = false;
     /** Non-null when a Pro dialog style is active; null in OSS mode. */
     private String activeProStyle = null;
 
@@ -203,7 +209,7 @@ public class SuperKeyDialog extends JDialog {
             scrollPane.setBackground(listBg);
             scrollPane.getViewport().setBackground(listBg);
 
-            // Spinner: match the panel theme colours
+            // Spinner and Badge: match the panel theme colours
             countSpinner.setBackground(panelBg);
             countSpinner.setForeground(textFg);
             Color sepColor = javax.swing.UIManager.getColor("Separator.foreground");
@@ -215,6 +221,9 @@ public class SuperKeyDialog extends JDialog {
                 de.getTextField().setForeground(textFg);
                 de.getTextField().setCaretColor(caretColor);
                 de.getTextField().setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            }
+            if (badgeLabel != null) {
+                badgeLabel.setForeground(textFg);
             }
 
             // Record which Pro style is active so filterList() uses the right shapes
@@ -389,11 +398,23 @@ public class SuperKeyDialog extends JDialog {
         }
 
         searchPanel.add(searchField, BorderLayout.CENTER);
-        searchPanel.add(countSpinner, BorderLayout.EAST);
+
+        JPanel rightPanel = new JPanel(new BorderLayout(8, 0));
+        rightPanel.setOpaque(false);
+
+        badgeLabel = new JLabel("");
+        badgeLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        badgeLabel.setForeground(new Color(150, 150, 150));
+        badgeLabel.setVisible(false); // Only visible when >1 items selected
+
+        rightPanel.add(badgeLabel, BorderLayout.CENTER);
+        rightPanel.add(countSpinner, BorderLayout.EAST);
+
+        searchPanel.add(rightPanel, BorderLayout.EAST);
 
         listModel = new DefaultListModel<>();
         resultList = new JList<>(listModel);
-        resultList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        resultList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         resultList.setFont(new Font("SansSerif", Font.PLAIN, 14));
         resultList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
@@ -409,8 +430,13 @@ public class SuperKeyDialog extends JDialog {
         scrollPane.setBorder(null);
         scrollPane.setVisible(false);
 
+        bannerContainer = new JPanel(new BorderLayout());
+        bannerContainer.setOpaque(false);
+        bannerContainer.setVisible(false);
+
         panel.add(searchPanel, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
+        panel.add(bannerContainer, BorderLayout.SOUTH);
 
         getContentPane().add(panel);
     }
@@ -505,16 +531,84 @@ public class SuperKeyDialog extends JDialog {
         });
 
         resultList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                ComponentProvider.ComponentItem selectedItem = resultList.getSelectedValue();
-                if (selectedItem != null) {
-                    countSpinner.setEnabled(!selectedItem.isAction);
+            if (!e.getValueIsAdjusting() && !isFiltering) {
+                List<ComponentProvider.ComponentItem> visibleSelected = resultList.getSelectedValuesList();
+                for (int i = 0; i < listModel.size(); i++) {
+                    ComponentProvider.ComponentItem item = listModel.getElementAt(i);
+                    if (visibleSelected.contains(item)) {
+                        globalBasket.add(item);
+                    } else {
+                        globalBasket.remove(item);
+                    }
                 }
+                updateBasketUI();
             }
         });
     }
 
+    private void updateBasketUI() {
+        int count = globalBasket.size();
+
+        if (count == 0) {
+            countSpinner.setEnabled(true);
+            badgeLabel.setVisible(false);
+            if (bannerContainer.isVisible()) {
+                bannerContainer.setVisible(false);
+                bannerContainer.removeAll();
+                refreshLayout();
+            }
+            return;
+        }
+
+        // Disable spinner if ANY selected item is an action (actions don't honor
+        // counts)
+        boolean hasAction = globalBasket.stream().anyMatch(item -> item.isAction);
+        countSpinner.setEnabled(!hasAction);
+
+        if (count > 1) {
+            if (LicenseBridge.isPro()) {
+                badgeLabel.setText(count + " items selected");
+                badgeLabel.setVisible(true);
+                if (bannerContainer.isVisible()) {
+                    bannerContainer.setVisible(false);
+                    bannerContainer.removeAll();
+                    refreshLayout();
+                }
+            } else {
+                badgeLabel.setVisible(false);
+                if (!bannerContainer.isVisible()) {
+                    bannerContainer.removeAll();
+                    bannerContainer.add(LicenseBridge.getUpgradeBanner("Multiple Element Selection"));
+                    bannerContainer.setVisible(true);
+                    refreshLayout();
+                }
+            }
+        } else {
+            // count == 1
+            badgeLabel.setVisible(false);
+            if (bannerContainer.isVisible()) {
+                bannerContainer.setVisible(false);
+                bannerContainer.removeAll();
+                refreshLayout();
+            }
+        }
+    }
+
+    private void refreshLayout() {
+        if (!scrollPane.isVisible())
+            return; // Don't expand if collapsed
+        int shadowPad = "FLOATING_SHADOW".equals(activeProStyle) ? 24 : 0;
+        int expandedW = 600 + shadowPad;
+        int expandedH = 300 + shadowPad;
+        int finalH = bannerContainer.isVisible() ? expandedH + bannerContainer.getPreferredSize().height : expandedH;
+        setSize(expandedW, finalH);
+        applyProShape(expandedW, finalH);
+        revalidate();
+        repaint();
+    }
+
     private void filterList(String text) {
+        isFiltering = true;
         listModel.clear();
         String originalLowerText = text.toLowerCase().trim();
 
@@ -523,8 +617,6 @@ public class SuperKeyDialog extends JDialog {
         int shadowPad = "FLOATING_SHADOW".equals(activeProStyle) ? 24 : 0; // 2 × SHADOW_PAD(12)
         int collapsedW = 600 + shadowPad;
         int collapsedH = 54 + shadowPad;
-        int expandedW = 600 + shadowPad;
-        int expandedH = 300 + shadowPad;
 
         if (originalLowerText.isEmpty()) {
             scrollPane.setVisible(false);
@@ -532,6 +624,7 @@ public class SuperKeyDialog extends JDialog {
             applyProShape(collapsedW, collapsedH);
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
+            isFiltering = false;
             return;
         }
 
@@ -546,6 +639,7 @@ public class SuperKeyDialog extends JDialog {
             // Cannot call setText() directly from inside a DocumentListener notification
             // — that causes "Attempt to mutate in notification". Defer it.
             javax.swing.SwingUtilities.invokeLater(() -> searchField.setText(""));
+            isFiltering = false;
             return;
         }
 
@@ -570,10 +664,21 @@ public class SuperKeyDialog extends JDialog {
             listModel.addElement(item);
         }
 
+        // Restore selection state in resultList for items in globalBasket
+        List<Integer> selectedIndices = new java.util.ArrayList<>();
+        for (int i = 0; i < listModel.size(); i++) {
+            if (globalBasket.contains(listModel.getElementAt(i))) {
+                selectedIndices.add(i);
+            }
+        }
+        if (!selectedIndices.isEmpty()) {
+            int[] indices = selectedIndices.stream().mapToInt(Integer::intValue).toArray();
+            resultList.setSelectedIndices(indices);
+        }
+
         if (!filtered.isEmpty()) {
             scrollPane.setVisible(true);
-            setSize(expandedW, expandedH);
-            applyProShape(expandedW, expandedH);
+            refreshLayout();
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
         } else {
@@ -583,6 +688,7 @@ public class SuperKeyDialog extends JDialog {
             if (!hasBeenDragged)
                 setLocationRelativeTo(null);
         }
+        isFiltering = false;
     }
 
     /**
@@ -615,17 +721,28 @@ public class SuperKeyDialog extends JDialog {
     }
 
     private void injectSelected() {
-        ComponentProvider.ComponentItem selected = resultList.getSelectedValue();
-        if (selected != null) {
-            dispose();
+        List<ComponentProvider.ComponentItem> selectedItems = new java.util.ArrayList<>(globalBasket);
 
+        if (selectedItems.isEmpty()) {
+            return;
+        }
+
+        if (selectedItems.size() > 1 && !LicenseBridge.isPro()) {
+            // OSS users cannot inject multiple elements
+            return;
+        }
+
+        dispose();
+
+        int count = (Integer) countSpinner.getValue();
+
+        for (ComponentProvider.ComponentItem selected : selectedItems) {
             if (selected.isAction) {
-                // Execute JMeter GUI Action
+                // Execute JMeter GUI Action (once per action selected, ignoring spinner count)
                 ActionRouter.getInstance().doActionNow(
                         new ActionEvent(this, ActionEvent.ACTION_PERFORMED, selected.className));
             } else {
                 // Execute standard component insertion
-                int count = (Integer) countSpinner.getValue();
                 SuperKeyInjector.injectComponent(selected.className, count);
             }
         }
