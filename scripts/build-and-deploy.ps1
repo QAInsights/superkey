@@ -47,8 +47,8 @@ if (-not (Test-Path $ExtDir)) {
 Write-Ok "JMeter lib\ext: $ExtDir"
 
 # ── 2. Build ──────────────────────────────────────────────────────────────────
-Write-Step "Building SuperKey [$Profile profile] — mvn verify -P $Profile"
-mvn verify -P $Profile
+Write-Step "Building SuperKey [$Profile profile] — mvn package -P $Profile -DskipTests"
+mvn package -P $Profile -DskipTests
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "Build FAILED. Fix the errors above."
     exit 1

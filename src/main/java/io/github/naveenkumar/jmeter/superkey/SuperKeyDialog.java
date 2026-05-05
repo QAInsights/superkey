@@ -4,6 +4,7 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
 import java.awt.Graphics;
@@ -28,6 +29,7 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -35,7 +37,9 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.Timer;
@@ -179,12 +183,20 @@ public class SuperKeyDialog extends JDialog {
             Color listSelBg = javax.swing.UIManager.getColor("List.selectionBackground");
             Color listSelFg = javax.swing.UIManager.getColor("List.selectionForeground");
             Color caretColor = javax.swing.UIManager.getColor("TextField.caretForeground");
+            
+            // Fallback defaults with intelligent contrast detection
             if (panelBg == null)
                 panelBg = getBackground();
-            if (textFg == null)
-                textFg = Color.BLACK;
             if (textBg == null)
-                textBg = Color.WHITE;
+                textBg = panelBg != null ? panelBg : Color.WHITE;
+            
+            // Choose text color based on background brightness for proper contrast
+            if (textFg == null) {
+                textFg = isDarkBackground(textBg) ? Color.WHITE : Color.BLACK;
+            }
+            
+            // Debug logging
+            log.debug("SuperKey Pro: panelBg={}, textBg={}, textFg={}", panelBg, textBg, textFg);
             if (listBg == null)
                 listBg = panelBg;
             if (listFg == null)
@@ -210,17 +222,48 @@ public class SuperKeyDialog extends JDialog {
             scrollPane.getViewport().setBackground(listBg);
 
             // Spinner and Badge: match the panel theme colours
-            countSpinner.setBackground(panelBg);
-            countSpinner.setForeground(textFg);
-            Color sepColor = javax.swing.UIManager.getColor("Separator.foreground");
-            countSpinner.setBorder(BorderFactory.createLineBorder(
-                    sepColor != null ? sepColor : Color.GRAY));
+            // Override UI to force borderless appearance
+            countSpinner.setUI(new javax.swing.plaf.basic.BasicSpinnerUI());
+            countSpinner.setBackground(Color.WHITE);
+            countSpinner.setForeground(Color.BLACK);
+            countSpinner.setOpaque(true);
+            countSpinner.setBorder(BorderFactory.createEmptyBorder());
+            
+            countSpinner.setEditor(new JSpinner.NumberEditor(countSpinner, "#"));
+            
             JComponent spinEditor = countSpinner.getEditor();
             if (spinEditor instanceof JSpinner.DefaultEditor de) {
-                de.getTextField().setBackground(panelBg);
-                de.getTextField().setForeground(textFg);
-                de.getTextField().setCaretColor(caretColor);
-                de.getTextField().setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+                de.setBorder(BorderFactory.createEmptyBorder());
+                de.setOpaque(true);
+                de.setBackground(Color.WHITE);
+                
+                JTextField spinTextField = de.getTextField();
+                spinTextField.setBackground(Color.WHITE);
+                spinTextField.setForeground(Color.BLACK);
+                spinTextField.setCaretColor(Color.BLACK);
+                spinTextField.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+                spinTextField.setOpaque(true);
+                spinTextField.setHorizontalAlignment(JTextField.CENTER);
+                // Clear the auto-selection on focus so no selection highlight
+                // rectangle renders at all (keeps the number clearly visible as
+                // black-on-white).
+                spinTextField.addFocusListener(new java.awt.event.FocusAdapter() {
+                    @Override
+                    public void focusGained(java.awt.event.FocusEvent e) {
+                        javax.swing.SwingUtilities.invokeLater(() -> spinTextField.select(0, 0));
+                    }
+                });
+                // Also clear immediately after creation
+                javax.swing.SwingUtilities.invokeLater(() -> spinTextField.select(0, 0));
+            }
+            
+            // Make spinner buttons borderless
+            for (Component comp : countSpinner.getComponents()) {
+                if (comp instanceof JButton button) {
+                    button.setBorder(BorderFactory.createEmptyBorder());
+                    button.setContentAreaFilled(false);
+                    button.setFocusPainted(false);
+                }
             }
             if (badgeLabel != null) {
                 badgeLabel.setForeground(textFg);
@@ -279,6 +322,36 @@ public class SuperKeyDialog extends JDialog {
                 return java.awt.BorderLayout.CENTER;
         }
         return null;
+    }
+
+    /**
+     * Determines if a background color is dark using relative luminance calculation.
+     * Uses the WCAG formula for perceived brightness.
+     * 
+     * @param bg the background color to test
+     * @return true if the background is dark (luminance < 0.5), false otherwise
+     */
+    private boolean isDarkBackground(Color bg) {
+        if (bg == null) {
+            return false; // Assume light background if unknown
+        }
+        
+        // Calculate relative luminance using WCAG formula
+        // https://www.w3.org/TR/WCAG20/#relativeluminancedef
+        double r = bg.getRed() / 255.0;
+        double g = bg.getGreen() / 255.0;
+        double b = bg.getBlue() / 255.0;
+        
+        // Apply gamma correction
+        r = (r <= 0.03928) ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+        g = (g <= 0.03928) ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+        b = (b <= 0.03928) ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+        
+        // Calculate luminance
+        double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        
+        // Dark if luminance is less than 0.5 (midpoint)
+        return luminance < 0.5;
     }
 
     private void loadShortcuts() {
@@ -388,29 +461,88 @@ public class SuperKeyDialog extends JDialog {
         searchField.setOpaque(false);
         searchField.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        countSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 100, 1));
-        countSpinner.setFont(new Font("SansSerif", Font.PLAIN, 16));
+        // Create a custom borderless spinner by overriding paint
+        countSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 100, 1)) {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                // Force remove border after UI update
+                setBorder(BorderFactory.createEmptyBorder());
+            }
+            
+            @Override
+            protected void paintBorder(Graphics g) {
+                // Don't paint any border
+            }
+            
+            @Override
+            protected void paintComponent(Graphics g) {
+                // Paint with white background, no border
+                g.setColor(Color.WHITE);
+                g.fillRect(0, 0, getWidth(), getHeight());
+                super.paintComponent(g);
+            }
+        };
+        countSpinner.setFont(new Font("SansSerif", Font.PLAIN, 14));
         countSpinner.setToolTipText("Number of elements to add");
+        countSpinner.setUI(new javax.swing.plaf.basic.BasicSpinnerUI());
+        countSpinner.setEnabled(true); // Explicitly enable
+        countSpinner.setOpaque(true); // Make it opaque
+        countSpinner.setBackground(Color.WHITE); // White background
+        countSpinner.setForeground(Color.BLACK); // Black text
+        countSpinner.setPreferredSize(new java.awt.Dimension(50, 28));
+        countSpinner.setBorder(BorderFactory.createEmptyBorder());
+        
+        countSpinner.setEditor(new JSpinner.NumberEditor(countSpinner, "#"));
+        
         JComponent editor = countSpinner.getEditor();
-        if (editor instanceof JSpinner.DefaultEditor) {
-            ((JSpinner.DefaultEditor) editor).getTextField().setFont(new Font("SansSerif", Font.PLAIN, 16));
-            ((JSpinner.DefaultEditor) editor).getTextField().setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        if (editor instanceof JSpinner.DefaultEditor de) {
+            de.setBorder(BorderFactory.createEmptyBorder());
+            de.setOpaque(true);
+            de.setBackground(Color.WHITE);
+            JTextField textField = de.getTextField();
+            textField.setFont(new Font("SansSerif", Font.PLAIN, 14));
+            textField.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+            textField.setOpaque(true);
+            textField.setBackground(Color.WHITE);
+            textField.setForeground(Color.BLACK);
+            textField.setHorizontalAlignment(JTextField.CENTER);
+            // Clear the auto-selection on focus so no selection highlight
+            // rectangle renders (keeps the number clearly visible).
+            textField.addFocusListener(new java.awt.event.FocusAdapter() {
+                @Override
+                public void focusGained(java.awt.event.FocusEvent e) {
+                    javax.swing.SwingUtilities.invokeLater(() -> textField.select(0, 0));
+                }
+            });
+            // Clear immediately after creation
+            javax.swing.SwingUtilities.invokeLater(() -> textField.select(0, 0));
+        }
+        
+        // Style the spinner buttons
+        for (Component comp : countSpinner.getComponents()) {
+            if (comp instanceof JButton button) {
+                button.setBorder(BorderFactory.createEmptyBorder());
+                button.setContentAreaFilled(false);
+                button.setFocusPainted(false);
+            }
         }
 
-        searchPanel.add(searchField, BorderLayout.CENTER);
+        // Create a panel to hold the search field with the spinner inside it
+        JPanel searchFieldPanel = new JPanel(new BorderLayout(4, 0));
+        searchFieldPanel.setOpaque(false);
+        searchFieldPanel.add(searchField, BorderLayout.CENTER);
+        searchFieldPanel.add(countSpinner, BorderLayout.EAST);
 
-        JPanel rightPanel = new JPanel(new BorderLayout(8, 0));
-        rightPanel.setOpaque(false);
+        searchPanel.add(searchFieldPanel, BorderLayout.CENTER);
 
+        // Badge label for multi-selection (Pro feature)
         badgeLabel = new JLabel("");
         badgeLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
         badgeLabel.setForeground(new Color(150, 150, 150));
         badgeLabel.setVisible(false); // Only visible when >1 items selected
-
-        rightPanel.add(badgeLabel, BorderLayout.CENTER);
-        rightPanel.add(countSpinner, BorderLayout.EAST);
-
-        searchPanel.add(rightPanel, BorderLayout.EAST);
+        
+        searchPanel.add(badgeLabel, BorderLayout.EAST);
 
         listModel = new DefaultListModel<>();
         resultList = new JList<>(listModel);
@@ -481,9 +613,38 @@ public class SuperKeyDialog extends JDialog {
                     KeyEvent.VK_B, KeyEvent.VK_A
             };
             private int konamiIdx = 0;
+            
+            // Git command history navigation
+            private List<String> gitHistory = null;
+            private int historyIndex = -1;
+            private String currentInput = "";
 
             @Override
             public void keyPressed(KeyEvent e) {
+                String text = searchField.getText().trim();
+                
+                // Handle UP arrow for Git command history
+                if (e.getKeyCode() == KeyEvent.VK_UP) {
+                    // Only handle history if we're in Git command mode
+                    if (text.startsWith("git ") || text.equals("git") || historyIndex >= 0) {
+                        if (LicenseBridge.isPro()) {
+                            handleGitHistoryNavigation(true);
+                            return; // Don't process other UP arrow logic
+                        }
+                    }
+                }
+                
+                // Handle DOWN arrow for Git command history
+                if (e.getKeyCode() == KeyEvent.VK_DOWN) {
+                    // Only handle history if we're navigating history
+                    if (historyIndex >= 0) {
+                        if (LicenseBridge.isPro()) {
+                            handleGitHistoryNavigation(false);
+                            return; // Don't process other DOWN arrow logic
+                        }
+                    }
+                }
+                
                 // Track Konami code
                 if (e.getKeyCode() == KONAMI[konamiIdx]) {
                     konamiIdx++;
@@ -502,10 +663,69 @@ public class SuperKeyDialog extends JDialog {
                         resultList.requestFocus();
                     }
                 } else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    // Reset history navigation on enter
+                    historyIndex = -1;
+                    gitHistory = null;
+                    
+                    // Check if this is a direct Git command (not a suggestion)
+                    if (text.startsWith("git ") && LicenseBridge.isPro()) {
+                        // Execute Git command directly
+                        dispose();
+                        handleGitCommand(text);
+                        return;
+                    }
+                    
                     if (listModel.getSize() > 0) {
                         resultList.setSelectedIndex(0);
                         injectSelected();
                     }
+                }
+            }
+            
+            /**
+             * Handle Git command history navigation with UP/DOWN arrows.
+             * 
+             * @param navigateUp true for UP arrow (older commands), false for DOWN arrow (newer commands)
+             */
+            private void handleGitHistoryNavigation(boolean navigateUp) {
+                try {
+                    // Load history on first navigation
+                    if (gitHistory == null) {
+                        Class<?> handlerClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitCommandHandler");
+                        Object handler = handlerClass.getDeclaredConstructor().newInstance();
+                        java.lang.reflect.Method getHistoryMethod = handlerClass.getMethod("getCommandHistory");
+                        @SuppressWarnings("unchecked")
+                        List<String> history = (List<String>) getHistoryMethod.invoke(handler);
+                        
+                        if (history == null || history.isEmpty()) {
+                            return; // No history available
+                        }
+                        
+                        gitHistory = history;
+                        historyIndex = -1;
+                        currentInput = searchField.getText();
+                    }
+                    
+                    if (navigateUp) {
+                        // Navigate to older commands (UP arrow)
+                        if (historyIndex < gitHistory.size() - 1) {
+                            historyIndex++;
+                            searchField.setText(gitHistory.get(historyIndex));
+                        }
+                    } else {
+                        // Navigate to newer commands (DOWN arrow)
+                        if (historyIndex > 0) {
+                            historyIndex--;
+                            searchField.setText(gitHistory.get(historyIndex));
+                        } else if (historyIndex == 0) {
+                            // Return to original input
+                            historyIndex = -1;
+                            searchField.setText(currentInput);
+                            gitHistory = null; // Reset for next navigation
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.debug("Could not load Git command history", ex);
                 }
             }
         });
@@ -628,6 +848,23 @@ public class SuperKeyDialog extends JDialog {
             return;
         }
 
+        // --- Git Command Check (complete command with space) ---
+        if (originalLowerText.startsWith("git ") && originalLowerText.length() > 4) {
+            
+            // ALWAYS show suggestions for Git commands while typing
+            // Execution happens only when user presses Enter
+            showGitCommandSuggestions(originalLowerText);
+            isFiltering = false;
+            return;
+        }
+
+        // --- Git Command Autocomplete (typing "git" without space or partial) ---
+        if (originalLowerText.startsWith("git") && !originalLowerText.startsWith("git ") && LicenseBridge.isPro()) {
+            showGitCommandSuggestions(originalLowerText);
+            isFiltering = false;
+            return;
+        }
+
         // --- Easter Egg Check (exact match only, before normal search) ---
         if (EasterEggHandler.check(originalLowerText, this)) {
             // hide results, don't pollute search
@@ -692,6 +929,389 @@ public class SuperKeyDialog extends JDialog {
     }
 
     /**
+     * Show Git command suggestions when user types "git".
+     * Requirements: 26.5, 27.1
+     */
+    private void showGitCommandSuggestions(String partialText) {
+        String gitPart = "";
+        if (partialText.startsWith("git ") && partialText.length() > 4) {
+            gitPart = partialText.substring(4).trim();
+        }
+        
+        // Context-specific suggestions based on what user is typing
+        String[] suggestions = null;
+        
+        if (gitPart.equals("branch") || gitPart.startsWith("branch ")) {
+            suggestions = new String[] {
+                "git branch - List all branches",
+                "git branch <name> - Create new branch",
+                "git branch -d <name> - Delete branch",
+                "git branch -D <name> - Force delete branch",
+                "git branch -m <old> <new> - Rename branch"
+            };
+        } else if (gitPart.equals("tag") || gitPart.startsWith("tag ")) {
+            suggestions = new String[] {
+                "git tag - List all tags",
+                "git tag <name> - Create lightweight tag",
+                "git tag -a <name> -m \"msg\" - Create annotated tag",
+                "git tag -d <name> - Delete tag"
+            };
+        } else if (gitPart.equals("stash") || gitPart.startsWith("stash ")) {
+            suggestions = new String[] {
+                "git stash - Stash current changes",
+                "git stash list - List all stashes",
+                "git stash pop - Apply and remove latest stash",
+                "git stash apply - Apply latest stash (keep it)",
+                "git stash drop - Remove latest stash",
+                "git stash clear - Remove all stashes"
+            };
+        } else if (gitPart.equals("remote") || gitPart.startsWith("remote ")) {
+            suggestions = new String[] {
+                "git remote - List remotes",
+                "git remote -v - List remotes with URLs",
+                "git remote add <name> <url> - Add remote",
+                "git remote remove <name> - Remove remote",
+                "git remote show <name> - Show remote details"
+            };
+        } else if (gitPart.equals("checkout") || gitPart.startsWith("checkout ")) {
+            suggestions = new String[] {
+                "git checkout <branch> - Switch to branch",
+                "git checkout -b <name> - Create and switch to new branch",
+                "git checkout <file> - Discard changes in file"
+            };
+        } else if (gitPart.equals("merge") || gitPart.startsWith("merge ")) {
+            suggestions = new String[] {
+                "git merge <branch> - Merge branch into current",
+                "git merge --abort - Abort merge in progress"
+            };
+        } else if (gitPart.equals("reset") || gitPart.startsWith("reset ")) {
+            suggestions = new String[] {
+                "git reset - Unstage all files (mixed)",
+                "git reset <file> - Unstage specific file",
+                "git reset --soft <commit> - Move HEAD, keep changes staged",
+                "git reset --mixed <commit> - Move HEAD, unstage changes",
+                "git reset --hard <commit> - Move HEAD, discard all changes"
+            };
+        } else if (gitPart.equals("push") || gitPart.startsWith("push ")) {
+            suggestions = new String[] {
+                "git push - Push to default remote/branch",
+                "git push <remote> <branch> - Push to specific remote/branch",
+                "git push -u origin <branch> - Push and set upstream"
+            };
+        } else if (gitPart.equals("pull") || gitPart.startsWith("pull ")) {
+            suggestions = new String[] {
+                "git pull - Pull from default remote/branch",
+                "git pull <remote> <branch> - Pull from specific remote/branch"
+            };
+        } else if (gitPart.equals("fetch") || gitPart.startsWith("fetch ")) {
+            suggestions = new String[] {
+                "git fetch - Fetch from default remote",
+                "git fetch <remote> - Fetch from specific remote",
+                "git fetch --all - Fetch from all remotes"
+            };
+        } else if (gitPart.equals("commit") || gitPart.startsWith("commit ")) {
+            suggestions = new String[] {
+                "git commit -m \"message\" - Create a commit",
+                "git commit -am \"message\" - Stage all and commit",
+                "git commit --amend - Amend last commit"
+            };
+        } else if (gitPart.equals("add") || gitPart.startsWith("add ")) {
+            suggestions = new String[] {
+                "git add . - Stage all changes",
+                "git add <file> - Stage specific file",
+                "git add -A - Stage all (including deletions)"
+            };
+        } else if (gitPart.equals("restore") || gitPart.startsWith("restore ")) {
+            suggestions = new String[] {
+                "git restore <file> - Discard changes in file",
+                "git restore --staged <file> - Unstage file",
+                "git restore . - Discard all changes"
+            };
+        } else if (gitPart.equals("config") || gitPart.startsWith("config ")) {
+            suggestions = new String[] {
+                "git config user.name \"Name\" - Set user name",
+                "git config user.email \"email\" - Set user email",
+                "git config --list - List all config"
+            };
+        } else if (gitPart.equals("clone") || gitPart.startsWith("clone ")) {
+            suggestions = new String[] {
+                "git clone <url> - Clone repository",
+                "git clone <url> -b <branch> - Clone specific branch"
+            };
+        } else if (gitPart.equals("blame") || gitPart.startsWith("blame ")) {
+            suggestions = new String[] {
+                "git blame <file> - Show who changed each line"
+            };
+        } else if (gitPart.equals("grep") || gitPart.startsWith("grep ")) {
+            suggestions = new String[] {
+                "git grep <pattern> - Search for pattern in tracked files"
+            };
+        } else if (gitPart.equals("pop")) {
+            // Special case: "git pop" is not valid, suggest correct command
+            suggestions = new String[] {
+                "git stash pop - Apply and remove latest stash",
+                "Note: Use 'git stash pop' not 'git pop'"
+            };
+        } else {
+            // Generic Git commands when just typing "git"
+            suggestions = new String[] {
+                "git init - Initialize a new repository",
+                "git status - Show working tree status",
+                "git add . - Stage all changes",
+                "git commit -m \"msg\" - Create a commit",
+                "git log - View commit history",
+                "git diff - Show unstaged changes",
+                "git branch - List/manage branches",
+                "git checkout <branch> - Switch branches",
+                "git merge <branch> - Merge branches",
+                "git push - Push to remote",
+                "git pull - Pull from remote",
+                "git stash - Stash changes",
+                "git tag - Manage tags",
+                "git remote - Manage remotes"
+            };
+        }
+        
+        // Add suggestions to list
+        listModel.clear();
+        for (String suggestion : suggestions) {
+            if (suggestion.toLowerCase().contains(gitPart.toLowerCase()) || gitPart.isEmpty() || gitPart.equals("git")) {
+                ComponentProvider.ComponentItem item = new ComponentProvider.ComponentItem(
+                    suggestion, 
+                    "git-command", 
+                    true  // Mark as action so it doesn't try to inject as component
+                );
+                listModel.addElement(item);
+            }
+        }
+        
+        if (listModel.getSize() > 0) {
+            scrollPane.setVisible(true);
+            refreshLayout();
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
+        } else {
+            // No matches - collapse
+            int shadowPad = "FLOATING_SHADOW".equals(activeProStyle) ? 24 : 0;
+            scrollPane.setVisible(false);
+            setSize(600 + shadowPad, 54 + shadowPad);
+            applyProShape(600 + shadowPad, 54 + shadowPad);
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
+        }
+    }
+
+    /**
+     * Handle Git command execution.
+     * Requirements: 1.1, 1.3, 23.1, 23.5, 26.1, 26.2, 26.3
+     */
+    private void handleGitCommand(String commandText) {
+        // Check Pro license first
+        if (!LicenseBridge.isPro()) {
+            // Show Pro upgrade banner
+            scrollPane.setVisible(false);
+            bannerContainer.removeAll();
+            bannerContainer.add(LicenseBridge.getUpgradeBanner("Git Commands"));
+            bannerContainer.setVisible(true);
+            
+            int shadowPad = "FLOATING_SHADOW".equals(activeProStyle) ? 24 : 0;
+            int w = 600 + shadowPad;
+            int h = 54 + shadowPad + bannerContainer.getPreferredSize().height;
+            setSize(w, h);
+            applyProShape(w, h);
+            if (!hasBeenDragged)
+                setLocationRelativeTo(null);
+            return;
+        }
+
+        // Pro license active - execute Git command
+        try {
+            // Load Git classes via reflection to avoid compile-time dependency
+            Class<?> parserClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitCommandParser");
+            Class<?> handlerClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitCommandHandler");
+            Class<?> commandClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitCommand");
+            Class<?> exceptionClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitParseException");
+            
+            // Create parser and parse command
+            Object parser = parserClass.getDeclaredConstructor().newInstance();
+            java.lang.reflect.Method parseMethod = parserClass.getMethod("parse", String.class);
+            Object gitCommand = parseMethod.invoke(parser, commandText);
+            
+            if (gitCommand == null) {
+                showGitError("Not a valid Git command");
+                return;
+            }
+            
+            // Close dialog before executing command
+            dispose();
+            
+            // Create handler and execute async
+            Object handler = handlerClass.getDeclaredConstructor().newInstance();
+            
+            // Create callback using reflection
+            Class<?> callbackInterface = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitResultCallback");
+            Object callback = java.lang.reflect.Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[] { callbackInterface },
+                (proxy, method, args) -> {
+                    if ("onSuccess".equals(method.getName())) {
+                        String result = (String) args[0];
+                        showGitResult(result, true);
+                    } else if ("onError".equals(method.getName())) {
+                        String error = (String) args[0];
+                        showGitResult(error, false);
+                    }
+                    return null;
+                }
+            );
+            
+            // Execute async with command string for history tracking
+            java.lang.reflect.Method executeMethod = handlerClass.getMethod("executeAsync", String.class, commandClass, callbackInterface);
+            executeMethod.invoke(handler, commandText, gitCommand, callback);
+            
+        } catch (ClassNotFoundException e) {
+            // Git classes not found - shouldn't happen if Pro license is active
+            log.error("Git command classes not found", e);
+            showGitError("Git command support not available");
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause != null && cause.getClass().getSimpleName().equals("GitParseException")) {
+                showGitError(cause.getMessage());
+            } else {
+                log.error("Error executing Git command", e);
+                showGitError("Error: " + (cause != null ? cause.getMessage() : e.getMessage()));
+            }
+        } catch (Exception e) {
+            log.error("Error handling Git command", e);
+            showGitError("Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Show Git command result in a dialog.
+     * Requirements: 23.1, 23.5
+     */
+    private void showGitResult(String message, boolean success) {
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            try {
+                // Try to use Pro GitResultDialog if available
+                Class<?> dialogClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitResultDialog");
+                Object resultDialog = dialogClass.getDeclaredConstructor().newInstance();
+                
+                if (success) {
+                    java.lang.reflect.Method showSuccessMethod = dialogClass.getMethod("showSuccess", String.class);
+                    showSuccessMethod.invoke(resultDialog, message);
+                } else {
+                    java.lang.reflect.Method showErrorMethod = dialogClass.getMethod("showError", String.class);
+                    showErrorMethod.invoke(resultDialog, message);
+                }
+            } catch (ClassNotFoundException e) {
+                // Fallback to compact JOptionPane
+                showCompactGitMessage(message, success);
+            } catch (Exception e) {
+                log.error("Error showing Git result", e);
+                showCompactGitMessage(message, success);
+            }
+        });
+    }
+
+    /**
+     * Show a compact Git message using JOptionPane.
+     */
+    private void showCompactGitMessage(String message, boolean success) {
+        // Create a compact dialog
+        JDialog dialog = new JDialog((Frame) null, success ? "Git Success" : "Git Error", true);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        
+        // Calculate size based on message length
+        int lines = message.split("\n").length;
+        int width = Math.min(500, Math.max(300, message.length() * 6));
+        int height = Math.min(400, Math.max(150, lines * 20 + 100));
+        dialog.setSize(width, height);
+        dialog.setLocationRelativeTo(null);
+        
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Status label
+        JLabel statusLabel = new JLabel(success ? "✓ Success" : "✗ Error");
+        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
+        statusLabel.setForeground(success ? new Color(34, 139, 34) : new Color(204, 0, 0));
+        panel.add(statusLabel, BorderLayout.NORTH);
+        
+        // Message area
+        JTextArea textArea = new JTextArea(message);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        textArea.setEditable(false);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        textArea.setCaretPosition(0);
+        
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+        panel.add(scrollPane, BorderLayout.CENTER);
+        
+        // Close button
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(e -> dialog.dispose());
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(closeButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // Add keyboard navigation
+        // ESC or Tab to close
+        dialog.getRootPane().registerKeyboardAction(
+            e -> dialog.dispose(),
+            KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+        
+        dialog.getRootPane().registerKeyboardAction(
+            e -> dialog.dispose(),
+            KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_TAB, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+        
+        // Set close button as default button (Enter key activates it)
+        dialog.getRootPane().setDefaultButton(closeButton);
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+
+    /**
+     * Show Git command error inline in the dialog.
+     */
+    private void showGitError(String error) {
+        scrollPane.setVisible(false);
+        bannerContainer.removeAll();
+        
+        JLabel errorLabel = new JLabel("<html><div style='padding: 10px; color: #cc0000;'>" + error + "</div></html>");
+        errorLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        bannerContainer.add(errorLabel);
+        bannerContainer.setVisible(true);
+        
+        int shadowPad = "FLOATING_SHADOW".equals(activeProStyle) ? 24 : 0;
+        int w = 600 + shadowPad;
+        int h = 54 + shadowPad + bannerContainer.getPreferredSize().height;
+        setSize(w, h);
+        applyProShape(w, h);
+        if (!hasBeenDragged)
+            setLocationRelativeTo(null);
+        
+        // Auto-hide error after 3 seconds
+        Timer timer = new Timer(3000, e -> {
+            bannerContainer.setVisible(false);
+            bannerContainer.removeAll();
+            int collapsedH = 54 + shadowPad;
+            setSize(w, collapsedH);
+            applyProShape(w, collapsedH);
+        });
+        timer.setRepeats(false);
+        timer.start();
+    }
+
+    /**
      * Applies the correct window shape / clip for the current state.
      * In OSS mode (activeProStyle == null) uses the standard ARC=20 rounded rect.
      * In Pro mode uses the style-appropriate shape so setShape() is never
@@ -729,6 +1349,18 @@ public class SuperKeyDialog extends JDialog {
 
         if (selectedItems.size() > 1 && !LicenseBridge.isPro()) {
             // OSS users cannot inject multiple elements
+            return;
+        }
+
+        // Check if this is a Git command suggestion
+        if (!selectedItems.isEmpty() && "git-command".equals(selectedItems.get(0).className)) {
+            // Extract the actual command from the display text (before the " - " description)
+            String displayText = selectedItems.get(0).name;
+            String gitCommand = displayText.split(" - ")[0].trim();
+            
+            // Close dialog and execute the Git command
+            dispose();
+            handleGitCommand(gitCommand);
             return;
         }
 

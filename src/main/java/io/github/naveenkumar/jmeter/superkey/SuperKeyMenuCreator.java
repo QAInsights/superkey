@@ -213,6 +213,36 @@ public class SuperKeyMenuCreator extends AbstractAction implements MenuCreator {
     @Override
     public Set<String> getActionNames() {
         scheduleToolbarInjection();
+        scheduleGitStatusBarInjection();
         return commands;
+    }
+    
+    /**
+     * Schedule Git status bar injection (Pro feature).
+     */
+    private void scheduleGitStatusBarInjection() {
+        // Check if Pro license is active
+        if (!io.github.naveenkumar.jmeter.superkey.LicenseBridge.isPro()) {
+            return;
+        }
+        
+        java.util.Timer timer = new java.util.Timer("GitStatusBar-Injector-Timer", true);
+        timer.scheduleAtFixedRate(new java.util.TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    // Use reflection to avoid compile-time dependency on Pro classes
+                    Class<?> statusBarClass = Class.forName("io.github.naveenkumar.jmeter.superkey.pro.git.GitStatusBar");
+                    java.lang.reflect.Method injectMethod = statusBarClass.getMethod("inject");
+                    injectMethod.invoke(null);
+                    timer.cancel(); // Stop polling once injected
+                } catch (ClassNotFoundException e) {
+                    // Pro classes not available, stop trying
+                    timer.cancel();
+                } catch (Exception e) {
+                    // GUI might not be ready yet, keep trying
+                }
+            }
+        }, 1000, 1000); // Check every 1 second
     }
 }

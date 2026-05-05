@@ -62,3 +62,8 @@ PRO*.md
 GIT*.md
 private.key
 superkey.lic
+*.md
+!README.md
+.kiro/specs/git-command-support/.config.kiro
+.kiro/specs/jmeter-ui-reload-after-checkout/.config.kiro
+.jqwik-database
